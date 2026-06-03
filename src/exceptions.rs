@@ -1,6 +1,6 @@
 use core::arch::global_asm;
-
 use crate::kernel_uart_direct_log;
+use crate::read_sysreg;
 /// CPU snapshot taken at the moment of an exception.
 ///
 /// Saved by the assembler trampoline on entry, restored before `eret`.
@@ -36,122 +36,176 @@ impl TrapFrame {
     pub const SPSR_OFFSET: usize = 31 * 8 + 16; // 264
     pub const FRAME_SIZE: usize = 272;
 }
-
+// Construct Exception Vector Table
+// Construct [TrapFrame] onto the stack
+//
 global_asm!(
     r#"
 .section .text.vectors
+
+.macro save_context
+    stp x0, x1,   [sp, #0]
+    stp x2, x3,   [sp, #16]
+    stp x4, x5,   [sp, #32]
+    stp x6, x7,   [sp, #48]
+    stp x8, x9,   [sp, #64]
+    stp x10, x11, [sp, #80]
+    stp x12, x13, [sp, #96]
+    stp x14, x15, [sp, #112]
+    stp x16, x17, [sp, #128]
+    stp x18, x19, [sp, #144]
+    stp x20, x21, [sp, #160]
+    stp x22, x23, [sp, #176]
+    stp x24, x25, [sp, #192]
+    stp x26, x27, [sp, #208]
+    stp x28, x29, [sp, #224]
+    str x30,      [sp, #240]
+    mrs x0, sp_el0
+    mrs x1, elr_el1
+    mrs x2, spsr_el1
+    stp x0, x1,   [sp, #248]
+    str x2,       [sp, #264]
+.endm
+
+.macro restore_context
+    ldr x2,       [sp, #264]
+    ldp x0, x1,   [sp, #248]
+    msr spsr_el1, x2
+    msr elr_el1,  x1
+    msr sp_el0,   x0
+    ldr x30,      [sp, #240]
+    ldp x28, x29, [sp, #224]
+    ldp x26, x27, [sp, #208]
+    ldp x24, x25, [sp, #192]
+    ldp x22, x23, [sp, #176]
+    ldp x20, x21, [sp, #160]
+    ldp x18, x19, [sp, #144]
+    ldp x16, x17, [sp, #128]
+    ldp x14, x15, [sp, #112]
+    ldp x12, x13, [sp, #96]
+    ldp x10, x11, [sp, #80]
+    ldp x8, x9,   [sp, #64]
+    ldp x6, x7,   [sp, #48]
+    ldp x4, x5,   [sp, #32]
+    ldp x2, x3,   [sp, #16]
+    ldp x0, x1,   [sp, #0]
+.endm
+
+.macro vector_entry handler
+    .balign 0x80
+    sub sp, sp, #272
+    b \handler
+.endm
+
 .balign 2048
 .global vector_table
 vector_table:
-.balign 0x80
-sync_curr_sp0:
-    mov x0, #0
-    b common_handler
+    vector_entry bad_mode
+    vector_entry bad_mode
+    vector_entry bad_mode
+    vector_entry bad_mode
 
-.balign 0x80
-irq_curr_sp0:
-    mov x0, #1
-    b common_handler
+    vector_entry el1_sync
+    vector_entry el1_irq
+    vector_entry el1_fiq
+    vector_entry el1_serror
 
-.balign 0x80
-fiq_curr_sp0:
-    mov x0, #2
-    b common_handler
+    vector_entry el0_sync
+    vector_entry el0_irq
+    vector_entry el0_fiq
+    vector_entry el0_serror
 
-.balign 0x80
-serror_curr_sp0:
-    mov x0, #3
-    b common_handler
+    vector_entry bad_mode
+    vector_entry bad_mode
+    vector_entry bad_mode
+    vector_entry bad_mode
 
-.balign 0x80
-sync_curr_spx:
-    mov x0, #4
-    b common_handler
+.macro impl_handler asm_handler_name rust_handler_name
+\asm_handler_name:
+    save_context
+    mov x0, sp
+    bl \rust_handler_name
+    b common_exit
+.endm
 
-.balign 0x80
-irq_curr_spx:
-    mov x0, #5
-    b common_handler
+.section .text
+impl_handler bad_mode bad_mode_handler
+impl_handler el1_sync el1_sync_handler
+impl_handler el1_irq el1_irq_handler
+impl_handler el1_fiq el1_fiq_handler
+impl_handler el1_serror el1_serror_handler
+impl_handler el0_sync el0_sync_handler
+impl_handler el0_irq el0_irq_handler
+impl_handler el0_fiq el0_fiq_handler
+impl_handler el0_serror el0_serror_handler
 
-.balign 0x80
-fiq_curr_spx:
-    mov x0, #6
-    b common_handler
-
-.balign 0x80
-serror_curr_spx:
-    mov x0, #7
-    b common_handler
-
-.balign 0x80
-sync_lower_64:
-    mov x0, #8
-    b common_handler
-
-.balign 0x80
-irq_lower_64:
-    mov x0, #9
-    b common_handler
-
-.balign 0x80
-fiq_lower_64:
-    mov x0, #10
-    b common_handler
-
-.balign 0x80
-serror_lower_64:
-    mov x0, #11
-    b common_handler
-
-.balign 0x80
-sync_lower_32:
-    mov x0, #12
-    b common_handler
-
-.balign 0x80
-irq_lower_32:
-    mov x0, #13
-    b common_handler
-
-.balign 0x80
-fiq_lower_32:
-    mov x0, #14
-    b common_handler
-
-.balign 0x80
-serror_lower_32:
-    mov x0, #15
-    b common_handler
-
-.balign 0x80
-common_handler:
-    bl rust_exception_entry
-1:
-    wfe
-    b 1b
+common_exit:
+    restore_context
+    add sp, sp, #272
+    eret
 "#
 );
 
 #[unsafe(no_mangle)]
-fn rust_exception_entry(vector: u64) -> ! {
-    let esr_el1: u64;
-    let elr_el1: u64;
-    let far_el1: u64;
-    unsafe {
-        core::arch::asm!("mrs {}, esr_el1", out(reg) esr_el1);
-        core::arch::asm!("mrs {}, elr_el1", out(reg) elr_el1);
-        core::arch::asm!("mrs {}, far_el1", out(reg) far_el1);
-    };
-    kernel_uart_direct_log!("EXCEPTION CAUGHT");
-    kernel_uart_direct_log!("vector = {}", vector);
-    kernel_uart_direct_log!("ESR_EL1 = {:#018x}", esr_el1);
-    kernel_uart_direct_log!("ELR_EL1 = {:#018x}", elr_el1);
-    kernel_uart_direct_log!("FAR_EL1 = {:#018x}", far_el1);
+extern "C" fn bad_mode_handler(frame: &mut TrapFrame) {
 
-    loop {
-        unsafe { core::arch::asm!("wfe") }
-    }
 }
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_sync_handler(frame: &mut TrapFrame) {
+    use crate::arch::*;
+    let esr = read_sysreg!(esr_el1);  
+    let far = read_sysreg!(far_el1);
+    let ec = ExceptionClass::from_esr(esr);                                                 
+    let ec_raw = ((esr >> 26) & 0x3f) as u8;                        
+                                          
+    kernel_uart_direct_log!("");                                                            
+    kernel_uart_direct_log!("=== EL1 SYNC EXCEPTION ===");
+    kernel_uart_direct_log!("Class    : {:?} ({:#04x})", ec, ec_raw);                       
+    kernel_uart_direct_log!("Reason   : {}", ec.description());                             
+    kernel_uart_direct_log!("ESR_EL1  : {:#018x}", esr);       
+    kernel_uart_direct_log!("ELR_EL1  : {:#018x}", frame.elr_el1);                          
+    kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);                                    
+    kernel_uart_direct_log!("SPSR_EL1 : {:#018x}", frame.spsr_el1);
+                                                                                          
+    loop { unsafe { core::arch::asm!("wfe") } } 
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_irq_handler(frame: &mut TrapFrame) {
+
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_fiq_handler(frame: &mut TrapFrame) {
+
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_serror_handler(frame: &mut TrapFrame) {
+
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_sync_handler(frame: &mut TrapFrame) {
+
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_irq_handler(frame: &mut TrapFrame) {
+
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_fiq_handler(frame: &mut TrapFrame) {
+
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_serror_handler(frame: &mut TrapFrame) {
+
+}
+
 
 unsafe extern "C" {
     static vector_table: u8;
@@ -166,3 +220,4 @@ pub fn install() {
         )
     }
 }
+

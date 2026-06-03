@@ -5,6 +5,8 @@ pub mod exceptions;
 pub mod sync;
 #[macro_use]
 pub mod uart;
+#[macro_use]
+pub mod arch;
 
 use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
