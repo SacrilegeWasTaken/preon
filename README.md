@@ -1,3 +1,5 @@
+<div align="center">
+
 ```
                               ┌──────────────────────────────────────┐
                               │                                      │
@@ -14,6 +16,8 @@
 ![rust](https://img.shields.io/badge/rust-2024-red)
 ![deps](https://img.shields.io/badge/dependencies-zero-brightgreen)
 ![status](https://img.shields.io/badge/status-bring--up-yellow)
+
+</div>
 
 ## Overview
 

@@ -4,6 +4,7 @@
 pub mod uart;
 
 use core::arch::{asm, global_asm};
+use core::fmt::Write;
 use core::panic::PanicInfo;
 
 // .section .text.boot
@@ -62,7 +63,8 @@ _start:
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain() -> ! {
-    uart::uart_write_str("Hello from exos!\n");
+    let mut uart = uart::Uart::take().unwrap();
+    let _ = writeln!(uart, "Hello from exos!");
     loop {
         unsafe { asm!("wfe") }
     }

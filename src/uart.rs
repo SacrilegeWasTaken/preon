@@ -3,7 +3,9 @@
 // PL011 UART register map for QEMU virt machine.
 // Reference: ARM PrimeCell UART (PL011) Technical Reference Manual (DDI 0183).
 
+use core::fmt;
 use core::ptr::{read_volatile, write_volatile};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 pub const UART_BASE: usize = 0x0900_0000;
 
@@ -68,15 +70,40 @@ pub const INT_PE: u32 = 1 << 8;
 pub const INT_BE: u32 = 1 << 9;
 pub const INT_OE: u32 = 1 << 10;
 
-pub fn uart_write_byte(b: u8) {
-    unsafe {
-        while (read_volatile(UART_FR) & FR_TXFF) != 0 {}
-        write_volatile(UART_DR, b.into());
+static TAKEN: AtomicBool = AtomicBool::new(false);
+
+pub struct Uart {
+    _private: (), // No external construct
+}
+
+impl Uart {
+    pub fn take() -> Option<Self> {
+        if TAKEN.swap(true, Ordering::Acquire) {
+            None
+        } else {
+            Some(Self { _private: () })
+        }
+    }
+
+    pub fn write_byte(&mut self, b: u8) {
+        unsafe {
+            while (read_volatile(UART_FR) & FR_TXFF) != 0 {}
+            write_volatile(UART_DR, b as u32);
+        }
     }
 }
 
-pub fn uart_write_str(s: &str) {
-    for b in s.bytes() {
-        uart_write_byte(b);
+impl Drop for Uart {
+    fn drop(&mut self) {
+        TAKEN.store(false, Ordering::Release);
+    }
+}
+
+impl fmt::Write for Uart {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for b in s.bytes() {
+            self.write_byte(b);
+        }
+        Ok(())
     }
 }
