@@ -1,10 +1,12 @@
 #![no_std]
 #![no_main]
 
+pub mod exceptions;
+pub mod sync;
+#[macro_use]
 pub mod uart;
 
 use core::arch::{asm, global_asm};
-use core::fmt::Write;
 use core::panic::PanicInfo;
 
 // .section .text.boot
@@ -63,8 +65,13 @@ _start:
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain() -> ! {
-    let mut uart = uart::Uart::take().unwrap();
-    let _ = writeln!(uart, "Hello from exos!");
+    exceptions::install();
+    kernel_uart_log!("Hello from Exos: {}", 3);
+
+    kernel_uart_direct_log!("Triggering exception...");
+    unsafe { core::arch::asm!("udf #0") }
+    kernel_uart_direct_log!("This should never print!");
+
     loop {
         unsafe { asm!("wfe") }
     }

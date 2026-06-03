@@ -5,7 +5,8 @@
 
 use core::fmt;
 use core::ptr::{read_volatile, write_volatile};
-use core::sync::atomic::{AtomicBool, Ordering};
+
+use crate::sync::SpinLock;
 
 pub const UART_BASE: usize = 0x0900_0000;
 
@@ -70,21 +71,10 @@ pub const INT_PE: u32 = 1 << 8;
 pub const INT_BE: u32 = 1 << 9;
 pub const INT_OE: u32 = 1 << 10;
 
-static TAKEN: AtomicBool = AtomicBool::new(false);
+#[allow(non_camel_case_types)]
+pub struct UartRaw;
 
-pub struct Uart {
-    _private: (), // No external construct
-}
-
-impl Uart {
-    pub fn take() -> Option<Self> {
-        if TAKEN.swap(true, Ordering::Acquire) {
-            None
-        } else {
-            Some(Self { _private: () })
-        }
-    }
-
+impl UartRaw {
     pub fn write_byte(&mut self, b: u8) {
         unsafe {
             while (read_volatile(UART_FR) & FR_TXFF) != 0 {}
@@ -93,17 +83,40 @@ impl Uart {
     }
 }
 
-impl Drop for Uart {
-    fn drop(&mut self) {
-        TAKEN.store(false, Ordering::Release);
-    }
-}
-
-impl fmt::Write for Uart {
+impl fmt::Write for UartRaw {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for b in s.bytes() {
             self.write_byte(b);
         }
         Ok(())
     }
+}
+
+pub static UART: SpinLock<UartDriver> = SpinLock::new(UartDriver { raw: UartRaw });
+
+#[allow(non_camel_case_types)]
+pub struct UartDriver {
+    raw: UartRaw,
+}
+
+impl fmt::Write for UartDriver {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.raw.write_str(s)
+    }
+}
+
+#[macro_export]
+macro_rules! kernel_uart_log {
+    ($($arg:tt)*) => {{
+        use core::fmt::Write as _;
+        let _ = writeln!($crate::uart::UART.lock(), $($arg)*);
+    }};
+}
+
+#[macro_export]
+macro_rules! kernel_uart_direct_log {
+    ($($arg:tt)*) => {{
+        use core::fmt::Write as _;
+        let _ = writeln!($crate::uart::UartRaw, $($arg)*);
+    }};
 }

@@ -23,7 +23,7 @@
 
 A from-scratch kernel written in Rust for the ARMv8-A architecture, booting
 on the QEMU `virt` machine. No external crates — just `core` and a
-`global_asm!` boot stub. The goal is... I don't give a fuck.
+`global_asm!` boot stub. The goal is... I don't give a fuck. No LLM-codegen is ever used.
 
 ## Target
 
