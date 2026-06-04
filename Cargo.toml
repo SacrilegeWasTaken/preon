@@ -1,19 +1,24 @@
-[package]
-name = "exos"
+[workspace]
+resolver = "3"
+
+members = [
+    "kernel/core",
+    "kernel/builtin",
+    "kernel/arch",
+    "kernel/exceptions",
+#"drivers",
+#"toolchain",
+]
+
+[workspace.package]
 version = "0.1.0"
-edition = "2024"
+edition = "2024" 
+authors = ["Leonid Levchishin <you@example.com>"]
 
-[dependencies]
+[workspace.dependencies]
+kernel_arch = { path = "kernel/arch" }
+kernel_builtin = { path = "kernel/builtin" }
+kernel_core = { path = "kernel/core" }
+kernel_exceptions = { path = "kernel/exceptions" }
 
-[[bin]]
-name = "exos"
-test = false
-bench = false
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
-opt-level = 3
-lto = true
+driver_uart = { path = "drivers/uart" }

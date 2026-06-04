@@ -1,6 +1,8 @@
+#![no_std]
+
 use core::arch::global_asm;
-use crate::kernel_uart_direct_log;
-use crate::read_sysreg;
+use kernel_arch::{read_sysreg, ExceptionClass};
+use kernel_builtin::kernel_uart_direct_log;
 /// CPU snapshot taken at the moment of an exception.
 ///
 /// Saved by the assembler trampoline on entry, restored before `eret`.
@@ -38,7 +40,7 @@ impl TrapFrame {
 }
 // Construct Exception Vector Table
 // Construct [TrapFrame] onto the stack
-//
+// Calling exact Rust's handler
 global_asm!(
     r#"
 .section .text.vectors
@@ -147,65 +149,49 @@ common_exit:
 );
 
 #[unsafe(no_mangle)]
-extern "C" fn bad_mode_handler(frame: &mut TrapFrame) {
-
-}
+extern "C" fn bad_mode_handler(frame: &mut TrapFrame) {}
 
 #[unsafe(no_mangle)]
 extern "C" fn el1_sync_handler(frame: &mut TrapFrame) {
-    use crate::arch::*;
-    let esr = read_sysreg!(esr_el1);  
+    let esr = read_sysreg!(esr_el1);
     let far = read_sysreg!(far_el1);
-    let ec = ExceptionClass::from_esr(esr);                                                 
-    let ec_raw = ((esr >> 26) & 0x3f) as u8;                        
-                                          
-    kernel_uart_direct_log!("");                                                            
+    let ec = ExceptionClass::from_esr(esr);
+    let ec_raw = ((esr >> 26) & 0x3f) as u8;
+
+    kernel_uart_direct_log!("");
     kernel_uart_direct_log!("=== EL1 SYNC EXCEPTION ===");
-    kernel_uart_direct_log!("Class    : {:?} ({:#04x})", ec, ec_raw);                       
-    kernel_uart_direct_log!("Reason   : {}", ec.description());                             
-    kernel_uart_direct_log!("ESR_EL1  : {:#018x}", esr);       
-    kernel_uart_direct_log!("ELR_EL1  : {:#018x}", frame.elr_el1);                          
-    kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);                                    
+    kernel_uart_direct_log!("Class    : {:?} ({:#04x})", ec, ec_raw);
+    kernel_uart_direct_log!("Reason   : {}", ec.description());
+    kernel_uart_direct_log!("ESR_EL1  : {:#018x}", esr);
+    kernel_uart_direct_log!("ELR_EL1  : {:#018x}", frame.elr_el1);
+    kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
     kernel_uart_direct_log!("SPSR_EL1 : {:#018x}", frame.spsr_el1);
-                                                                                          
-    loop { unsafe { core::arch::asm!("wfe") } } 
+
+    loop {
+        unsafe { core::arch::asm!("wfe") }
+    }
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn el1_irq_handler(frame: &mut TrapFrame) {
-
-}
+extern "C" fn el1_irq_handler(frame: &mut TrapFrame) {}
 
 #[unsafe(no_mangle)]
-extern "C" fn el1_fiq_handler(frame: &mut TrapFrame) {
-
-}
+extern "C" fn el1_fiq_handler(frame: &mut TrapFrame) {}
 
 #[unsafe(no_mangle)]
-extern "C" fn el1_serror_handler(frame: &mut TrapFrame) {
-
-}
+extern "C" fn el1_serror_handler(frame: &mut TrapFrame) {}
 
 #[unsafe(no_mangle)]
-extern "C" fn el0_sync_handler(frame: &mut TrapFrame) {
-
-}
+extern "C" fn el0_sync_handler(frame: &mut TrapFrame) {}
 
 #[unsafe(no_mangle)]
-extern "C" fn el0_irq_handler(frame: &mut TrapFrame) {
-
-}
+extern "C" fn el0_irq_handler(frame: &mut TrapFrame) {}
 
 #[unsafe(no_mangle)]
-extern "C" fn el0_fiq_handler(frame: &mut TrapFrame) {
-
-}
+extern "C" fn el0_fiq_handler(frame: &mut TrapFrame) {}
 
 #[unsafe(no_mangle)]
-extern "C" fn el0_serror_handler(frame: &mut TrapFrame) {
-
-}
-
+extern "C" fn el0_serror_handler(frame: &mut TrapFrame) {}
 
 unsafe extern "C" {
     static vector_table: u8;
@@ -220,4 +206,3 @@ pub fn install() {
         )
     }
 }
-

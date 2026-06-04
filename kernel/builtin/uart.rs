@@ -1,10 +1,9 @@
-#![allow(dead_code)]
-
 // PL011 UART register map for QEMU virt machine.
 // Reference: ARM PrimeCell UART (PL011) Technical Reference Manual (DDI 0183).
 
 use core::fmt;
 use core::ptr::{read_volatile, write_volatile};
+use core::result::Result::Ok;
 
 use crate::sync::SpinLock;
 

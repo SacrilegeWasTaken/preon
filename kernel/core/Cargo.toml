@@ -1,0 +1,13 @@
+[package]
+name = "kernel_core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[[bin]]
+path = "main.rs"
+name = "kernel"
+
+[dependencies]
+kernel_builtin.workspace = true
+kernel_exceptions.workspace = true

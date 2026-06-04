@@ -1,0 +1,11 @@
+[package]
+name = "drivers_uart"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "drivers_uart"
+path = "lib.rs"
+
+[dependencies]

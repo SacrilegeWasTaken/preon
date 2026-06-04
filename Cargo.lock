@@ -3,5 +3,25 @@
 version = 4
 
 [[package]]
-name = "exos"
+name = "kernel_arch"
 version = "0.1.0"
+
+[[package]]
+name = "kernel_builtin"
+version = "0.1.0"
+
+[[package]]
+name = "kernel_core"
+version = "0.1.0"
+dependencies = [
+ "kernel_builtin",
+ "kernel_exceptions",
+]
+
+[[package]]
+name = "kernel_exceptions"
+version = "0.1.0"
+dependencies = [
+ "kernel_arch",
+ "kernel_builtin",
+]

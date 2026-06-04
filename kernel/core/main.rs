@@ -1,15 +1,10 @@
 #![no_std]
 #![no_main]
 
-pub mod exceptions;
-pub mod sync;
-#[macro_use]
-pub mod uart;
-#[macro_use]
-pub mod arch;
-
 use core::arch::{asm, global_asm};
 use core::panic::PanicInfo;
+
+use kernel_builtin::{kernel_uart_direct_log, kernel_uart_log};
 
 // .section .text.boot
 // .global _start
@@ -67,7 +62,7 @@ _start:
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain() -> ! {
-    exceptions::install();
+    kernel_exceptions::install();
     kernel_uart_log!("Hello from Exos: {}", 3);
 
     kernel_uart_direct_log!("Triggering exception...");

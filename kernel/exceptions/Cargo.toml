@@ -1,0 +1,13 @@
+[package]
+name = "kernel_exceptions"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "kernel_exceptions"
+path = "lib.rs"
+
+[dependencies]
+kernel_builtin.workspace = true
+kernel_arch.workspace = true

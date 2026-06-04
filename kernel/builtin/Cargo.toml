@@ -1,0 +1,12 @@
+[package]
+name = "kernel_builtin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "kernel_builtin"
+path = "lib.rs"
+
+[dependencies]
+

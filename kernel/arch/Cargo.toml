@@ -1,0 +1,12 @@
+[package]
+name = "kernel_arch"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "kernel_arch"
+path = "lib.rs"
+
+[dependencies]
+

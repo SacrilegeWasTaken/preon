@@ -1,4 +1,5 @@
 use core::cell::UnsafeCell;
+use core::ops::Drop;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 pub struct SpinLock<T> {
@@ -6,7 +7,7 @@ pub struct SpinLock<T> {
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T: Send> Sync for SpinLock<T> {}
+unsafe impl<T: core::marker::Send> core::marker::Sync for SpinLock<T> {}
 
 impl<T> SpinLock<T> {
     pub const fn new(data: T) -> Self {
