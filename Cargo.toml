@@ -2,10 +2,11 @@
 resolver = "3"
 
 members = [
-    "kernel/core",
-    "kernel/builtin",
-    "kernel/arch",
-    "kernel/exceptions",
+  "kernel/core",
+  "kernel/builtin",
+  "kernel/arch",
+  "kernel/exceptions",
+  "kernel/cpu",
 #"drivers",
 #"toolchain",
 ]
@@ -20,5 +21,8 @@ kernel_arch = { path = "kernel/arch" }
 kernel_builtin = { path = "kernel/builtin" }
 kernel_core = { path = "kernel/core" }
 kernel_exceptions = { path = "kernel/exceptions" }
+kernel_cpu = { path = "kernel/cpu" }
 
 driver_uart = { path = "drivers/uart" }
+
+fdt = "0.1.5"

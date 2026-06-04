@@ -1,17 +1,15 @@
 [package]
-name = "kernel_core"
+name = "kernel_cpu"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
-[[bin]]
-path = "main.rs"
-name = "kernel"
+[lib]
+name = "kernel_cpu"
+path = "lib.rs"
 test = false
 bench = false
 
 [dependencies]
 kernel_builtin.workspace = true
-kernel_exceptions.workspace = true
-
-fdt.workspace = true 
+kernel_arch.workspace = true

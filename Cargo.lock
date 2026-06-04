@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "fdt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "784a4df722dc6267a04af36895398f59d21d07dce47232adf31ec0ff2fa45e67"
+
+[[package]]
 name = "kernel_arch"
 version = "0.1.0"
 
@@ -14,8 +20,17 @@ version = "0.1.0"
 name = "kernel_core"
 version = "0.1.0"
 dependencies = [
+ "fdt",
  "kernel_builtin",
  "kernel_exceptions",
+]
+
+[[package]]
+name = "kernel_cpu"
+version = "0.1.0"
+dependencies = [
+ "kernel_arch",
+ "kernel_builtin",
 ]
 
 [[package]]
