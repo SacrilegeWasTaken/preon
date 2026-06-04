@@ -7,5 +7,7 @@ authors.workspace = true
 [lib]
 name = "drivers_uart"
 path = "lib.rs"
+test = false
+bench = false
 
 [dependencies]

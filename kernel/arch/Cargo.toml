@@ -7,6 +7,8 @@ authors.workspace = true
 [lib]
 name = "kernel_arch"
 path = "lib.rs"
+test = false
+bench = false
 
 [dependencies]
 

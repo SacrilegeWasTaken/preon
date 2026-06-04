@@ -7,6 +7,8 @@ authors.workspace = true
 [[bin]]
 path = "main.rs"
 name = "kernel"
+test = false
+bench = false
 
 [dependencies]
 kernel_builtin.workspace = true
