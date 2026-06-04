@@ -21,8 +21,8 @@ macro_rules! write_sysreg {
         let v: u64 = $val;
         unsafe {
             core::arch::asm!(
-                concat!("mrs", stringify!($name), ", {}"),
-                in(reg) val,
+                concat!("msr", stringify!($name), ", {}"),
+                in(reg) v,
                 options(nomem, nostack)
             );
         }

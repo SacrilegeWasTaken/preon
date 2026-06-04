@@ -19,10 +19,11 @@ run-qemu: image
 		-M virt \
 		-cpu cortex-a72 \
 		-m 128M \
+		-smp cores=4\
 		-nographic \
 		-kernel $(KERNEL_IMG)
 
-run: run-qemu
+run: clean run-qemu clean
 
 clean:
 	rm -rf $(BUILD_DIR)

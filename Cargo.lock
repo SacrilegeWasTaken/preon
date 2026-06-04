@@ -22,6 +22,7 @@ version = "0.1.0"
 dependencies = [
  "fdt",
  "kernel_builtin",
+ "kernel_cpu",
  "kernel_exceptions",
 ]
 
@@ -29,6 +30,7 @@ dependencies = [
 name = "kernel_cpu"
 version = "0.1.0"
 dependencies = [
+ "fdt",
  "kernel_arch",
  "kernel_builtin",
 ]
