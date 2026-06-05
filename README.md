@@ -22,7 +22,7 @@
 
 ## Overview
 
-A from-scratch kernel written in Rust for the ARMv8-A architecture, booting
+The real working kernel written from scratch in Rust for the ARMv8-A architecture, booting
 on the QEMU `virt` machine. No external crates (excluding fdt because I'm not 
 a psycho) — just `core` and a `global_asm!` boot stub. The goal is to write a 
 micro-kernel referencing freebsd(mostly)/seL4/linux kernels code. No LLM codegen 
