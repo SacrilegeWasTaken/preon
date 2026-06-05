@@ -33,7 +33,7 @@ impl TrapFrame {
     /// Pretty-print the frame to the emergency UART. Used by handlers
     /// that have no good way to recover.
     pub fn dump(&self, label: &str) {
-        let esr = Esr::new(read_sysreg!(esr_el1));
+        let esr = Esr::new();
         let far = read_sysreg!(far_el1);
 
         kernel_uart_direct_log!("");
@@ -65,7 +65,7 @@ unsafe extern "C" {
 /// may carry stale values from an earlier exception; surface them anyway
 /// because they're often the most useful clue.
 pub fn panic_dump(info: &core::panic::PanicInfo) {
-    let esr = Esr::new(read_sysreg!(esr_el1));
+    let esr = Esr::new();
     let elr = read_sysreg!(elr_el1);
     let far = read_sysreg!(far_el1);
     let spsr = read_sysreg!(spsr_el1);
@@ -82,12 +82,7 @@ pub fn panic_dump(info: &core::panic::PanicInfo) {
     kernel_uart_direct_log!("");
     kernel_uart_direct_log!("=== KERNEL PANIC ===");
     if let Some(loc) = info.location() {
-        kernel_uart_direct_log!(
-            "Location : {}:{}:{}",
-            loc.file(),
-            loc.line(),
-            loc.column()
-        );
+        kernel_uart_direct_log!("Location : {}:{}:{}", loc.file(), loc.line(), loc.column());
     }
     kernel_uart_direct_log!("Message  : {}", info.message());
     kernel_uart_direct_log!("MPIDR    : {:#018x}", mpidr);

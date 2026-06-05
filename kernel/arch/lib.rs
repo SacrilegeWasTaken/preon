@@ -44,8 +44,10 @@ macro_rules! write_sysreg {
 pub struct Esr(u64);
 
 impl Esr {
-    pub const fn new(raw: u64) -> Self {
-        Self(raw)
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let v = read_sysreg!(esr_el1);
+        Self(v)
     }
 
     pub const fn raw(self) -> u64 {
@@ -70,6 +72,10 @@ impl Esr {
     /// Instruction-specific syndrome bits. Interpretation depends on `EC`.
     pub const fn iss(self) -> u32 {
         (self.0 & 0x01FF_FFFF) as u32
+    }
+
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
     }
 }
 
@@ -111,7 +117,7 @@ impl ExceptionClass {
 
     /// Convenience wrapper preserved for callers that already have a raw ESR.
     pub fn from_esr(esr: u64) -> Self {
-        Esr::new(esr).class()
+        Esr::from_raw(esr).class()
     }
 
     pub fn description(&self) -> &'static str {
