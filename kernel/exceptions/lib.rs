@@ -1,28 +1,19 @@
 #![no_std]
 
 use core::arch::global_asm;
-use kernel_arch::{read_sysreg, ExceptionClass};
-use kernel_builtin::kernel_uart_direct_log;
-use kernel_builtin::wfe_loop;
-/// CPU snapshot taken at the moment of an exception.
+
+use kernel_arch::{read_sysreg, Esr};
+use kernel_builtin::{kernel_uart_direct_log, wfe_loop};
+
+/// CPU snapshot saved at exception entry and restored on `eret`.
 ///
-/// Saved by the assembler trampoline on entry, restored before `eret`.
-/// The handler receives `&mut TrapFrame` and may modify any field —
+/// The assembler trampoline (`ventry.s`) writes this frame on the kernel
+/// stack; handlers receive `&mut TrapFrame` and may modify any field —
 /// changes take effect when control returns to the interrupted code.
 ///
-/// # Fields
-///
-/// - `x` — general-purpose registers `x0..x30` (full integer state of
-///   the interrupted code).
-/// - `sp_el0` — stack pointer of EL0; meaningful only when the exception
-///   came from EL0, undefined otherwise.
-/// - `elr_el1` — Exception Link Register: address to return to via `eret`.
-/// - `spsr_el1` — saved `PSTATE` at the moment of exception:
-///   - `NZCV` — condition flags from the last comparison
-///   - `DAIF` — interrupt masks (`Debug`, `SError`, `IRQ`, `FIQ`)
-///   - `M[3:0]` — source EL and SP selection (`EL1h`, `EL1t`, `EL0t`)
-///   - `IL` — Illegal Execution State flag
-///   - `SS` — single-step debug flag
+/// Layout is hardware-defined and mirrors what `save_context` /
+/// `restore_context` macros store, so adding fields requires updating the
+/// `_OFFSET` constants and `FRAME_SIZE` together.
 #[derive(Debug)]
 #[repr(C)]
 pub struct TrapFrame {
@@ -33,70 +24,160 @@ pub struct TrapFrame {
 }
 
 impl TrapFrame {
-    pub const X_OFFSET: usize = 0; // x[0] starts from 0
-    pub const SP_EL0_OFFSET: usize = 31 * 8; // 248
-    pub const ELR_OFFSET: usize = 31 * 8 + 8; // 256
-    pub const SPSR_OFFSET: usize = 31 * 8 + 16; // 264
+    pub const X_OFFSET: usize = 0;
+    pub const SP_EL0_OFFSET: usize = 31 * 8;
+    pub const ELR_OFFSET: usize = 31 * 8 + 8;
+    pub const SPSR_OFFSET: usize = 31 * 8 + 16;
     pub const FRAME_SIZE: usize = 272;
+
+    /// Pretty-print the frame to the emergency UART. Used by handlers
+    /// that have no good way to recover.
+    pub fn dump(&self, label: &str) {
+        let esr = Esr::new(read_sysreg!(esr_el1));
+        let far = read_sysreg!(far_el1);
+
+        kernel_uart_direct_log!("");
+        kernel_uart_direct_log!("=== {} ===", label);
+        kernel_uart_direct_log!("Class    : {:?} ({:#04x})", esr.class(), esr.ec_raw());
+        kernel_uart_direct_log!("Reason   : {}", esr.class().description());
+        kernel_uart_direct_log!("ESR_EL1  : {:#018x}", esr.raw());
+        kernel_uart_direct_log!("ELR_EL1  : {:#018x}", self.elr_el1);
+        kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
+        kernel_uart_direct_log!("SPSR_EL1 : {:#018x}", self.spsr_el1);
+        kernel_uart_direct_log!("SP_EL0   : {:#018x}", self.sp_el0);
+        for (i, x) in self.x.iter().enumerate() {
+            kernel_uart_direct_log!("x{:<2}      : {:#018x}", i, x);
+        }
+    }
 }
-// Construct Exception Vector Table
-// Construct [TrapFrame] onto the stack
-// Calling exact Rust's handler
+
+// Vector table and dispatch trampolines for EL1.
 global_asm!(include_str!("asm/ventry.s"));
-
-#[unsafe(no_mangle)]
-extern "C" fn bad_mode_handler(frame: &mut TrapFrame) {}
-
-#[unsafe(no_mangle)]
-extern "C" fn el1_sync_handler(frame: &mut TrapFrame) {
-    let esr = read_sysreg!(esr_el1);
-    let far = read_sysreg!(far_el1);
-    let ec = ExceptionClass::from_esr(esr);
-    let ec_raw = ((esr >> 26) & 0x3f) as u8;
-
-    kernel_uart_direct_log!("");
-    kernel_uart_direct_log!("=== EL1 SYNC EXCEPTION ===");
-    kernel_uart_direct_log!("Class    : {:?} ({:#04x})", ec, ec_raw);
-    kernel_uart_direct_log!("Reason   : {}", ec.description());
-    kernel_uart_direct_log!("ESR_EL1  : {:#018x}", esr);
-    kernel_uart_direct_log!("ELR_EL1  : {:#018x}", frame.elr_el1);
-    kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
-    kernel_uart_direct_log!("SPSR_EL1 : {:#018x}", frame.spsr_el1);
-
-    wfe_loop!()
-}
-
-#[unsafe(no_mangle)]
-extern "C" fn el1_irq_handler(frame: &mut TrapFrame) {}
-
-#[unsafe(no_mangle)]
-extern "C" fn el1_fiq_handler(frame: &mut TrapFrame) {}
-
-#[unsafe(no_mangle)]
-extern "C" fn el1_serror_handler(frame: &mut TrapFrame) {}
-
-#[unsafe(no_mangle)]
-extern "C" fn el0_sync_handler(frame: &mut TrapFrame) {}
-
-#[unsafe(no_mangle)]
-extern "C" fn el0_irq_handler(frame: &mut TrapFrame) {}
-
-#[unsafe(no_mangle)]
-extern "C" fn el0_fiq_handler(frame: &mut TrapFrame) {}
-
-#[unsafe(no_mangle)]
-extern "C" fn el0_serror_handler(frame: &mut TrapFrame) {}
 
 unsafe extern "C" {
     static vector_table: u8;
 }
 
-pub fn install() {
+/// Print panic context to the emergency UART.
+///
+/// There is no real TrapFrame here — read the live system registers,
+/// the current SP, and the panic info. `ESR_EL1` / `ELR_EL1` / `FAR_EL1`
+/// may carry stale values from an earlier exception; surface them anyway
+/// because they're often the most useful clue.
+pub fn panic_dump(info: &core::panic::PanicInfo) {
+    let esr = Esr::new(read_sysreg!(esr_el1));
+    let elr = read_sysreg!(elr_el1);
+    let far = read_sysreg!(far_el1);
+    let spsr = read_sysreg!(spsr_el1);
+    let mpidr = read_sysreg!(mpidr_el1);
+    let sp: u64;
     unsafe {
         core::arch::asm!(
-            "msr vbar_el1, {0}",
-            "isb",
-            in(reg) &raw const vector_table
-        )
+            "mov {}, sp",
+            out(reg) sp,
+            options(nomem, nostack, preserves_flags),
+        );
     }
+
+    kernel_uart_direct_log!("");
+    kernel_uart_direct_log!("=== KERNEL PANIC ===");
+    if let Some(loc) = info.location() {
+        kernel_uart_direct_log!(
+            "Location : {}:{}:{}",
+            loc.file(),
+            loc.line(),
+            loc.column()
+        );
+    }
+    kernel_uart_direct_log!("Message  : {}", info.message());
+    kernel_uart_direct_log!("MPIDR    : {:#018x}", mpidr);
+    kernel_uart_direct_log!("SP       : {:#018x}", sp);
+    kernel_uart_direct_log!(
+        "ESR_EL1  : {:#018x} ({:?} / {:#04x})",
+        esr.raw(),
+        esr.class(),
+        esr.ec_raw()
+    );
+    kernel_uart_direct_log!("Reason   : {}", esr.class().description());
+    kernel_uart_direct_log!("ELR_EL1  : {:#018x}", elr);
+    kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
+    kernel_uart_direct_log!("SPSR_EL1 : {:#018x}", spsr);
+}
+
+/// Public interface to the kernel's exception vector table.
+pub struct ExceptionVectors;
+
+impl ExceptionVectors {
+    /// Publish the address of `vector_table` to `VBAR_EL1`. Idempotent;
+    /// each CPU calls this once during its own bring-up.
+    pub fn install() {
+        unsafe {
+            core::arch::asm!(
+                "msr vbar_el1, {0}",
+                "isb",
+                in(reg) &raw const vector_table,
+                options(nostack, preserves_flags),
+            );
+        }
+    }
+}
+
+// Handlers reached from `ventry.s`.
+//
+// Every slot in the vector table funnels into one of these via the
+// `impl_handler` macro. Names are mangled-free because the assembler
+// references them by symbol.
+
+#[unsafe(no_mangle)]
+extern "C" fn bad_mode_handler(frame: &mut TrapFrame) {
+    frame.dump("BAD MODE");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_sync_handler(frame: &mut TrapFrame) {
+    frame.dump("EL1 SYNC EXCEPTION");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_irq_handler(frame: &mut TrapFrame) {
+    frame.dump("EL1 IRQ (unhandled)");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_fiq_handler(frame: &mut TrapFrame) {
+    frame.dump("EL1 FIQ (unhandled)");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el1_serror_handler(frame: &mut TrapFrame) {
+    frame.dump("EL1 SError");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_sync_handler(frame: &mut TrapFrame) {
+    frame.dump("EL0 SYNC (unhandled)");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_irq_handler(frame: &mut TrapFrame) {
+    frame.dump("EL0 IRQ (unhandled)");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_fiq_handler(frame: &mut TrapFrame) {
+    frame.dump("EL0 FIQ (unhandled)");
+    wfe_loop!()
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn el0_serror_handler(frame: &mut TrapFrame) {
+    frame.dump("EL0 SError");
+    wfe_loop!()
 }

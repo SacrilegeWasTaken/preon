@@ -14,5 +14,6 @@ bench = false
 kernel_builtin.workspace = true
 kernel_exceptions.workspace = true
 kernel_cpu.workspace = true
+kernel_arch.workspace = true
 
 fdt.workspace = true 

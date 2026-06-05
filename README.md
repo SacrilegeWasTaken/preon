@@ -56,19 +56,20 @@ makes sense until its prerequisites are in place.
 - [x] `TrapFrame` on the kernel stack, mirrored to a `#[repr(C)]` Rust struct
 - [x] Eight typed handlers (EL1 / EL0 × sync / IRQ / FIQ / SError) + `bad_mode`
 - [x] `read_sysreg!` / `write_sysreg!` macros
-- [x] `ESR_EL1` exception class decoding into a human-readable string
-- [ ] Full `TrapFrame` dump on panic (registers, ELR, SPSR, FAR, decoded ESR)
-- [x] `panic_handler` writes through `RawUart` and decodes location info
+- [x] `ESR_EL1` exception class decoding into a human-readable string, `Esr` newtype
+- [x] Full `TrapFrame` dump on every handler (registers, ELR, SPSR, FAR, decoded ESR)
+- [x] `panic_handler` writes through `RawUart` and dumps register state
 
-### Phase 2 — SMP bring-up (current)
+### Phase 2 — SMP bring-up
 
 - [x] PSCI parser (`/psci` node from DTB: `method`, `cpu_on` function ID)
-- [ ] `Psci::cpu_on` via `hvc` / `smc` with full SMCCC clobber list
-- [ ] Statically-allocated per-CPU stacks and `CpuData` array
-- [ ] `TPIDR_EL1` per-CPU pointer: `install_current_cpu_local` / `current_cpu`
-- [ ] `secondary_entry` trampoline completes CPU-local init (FP, VBAR)
-- [ ] `secondary_cpu_main` Rust entry, online barrier via `AtomicU64` bitmap
-- [ ] Primary CPU enumerates secondaries from DTB and brings them up
+- [x] `Psci::cpu_on` via `hvc` / `smc` with full SMCCC clobber list, `PsciError` enum
+- [x] Statically-allocated per-CPU stacks and `CpuData` array
+- [x] `TPIDR_EL1` per-CPU pointer: `install_current_cpu_local` / `current_cpu`
+- [x] `secondary_entry` trampoline completes CPU-local init (FP, VBAR, SP, TPIDR)
+- [x] `secondary_cpu_main` Rust entry, online barrier via `AtomicU64` bitmap
+- [x] Primary CPU enumerates secondaries from DTB and brings them up (`Smp::bring_up_all`)
+- [ ] IPI (inter-processor interrupt) framework — deferred until GIC lands
 
 ### Phase 3 — Virtual memory
 

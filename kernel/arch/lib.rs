@@ -1,5 +1,8 @@
 #![no_std]
 
+/// Read a system register by name, e.g. `read_sysreg!(esr_el1)`.
+///
+/// Expands to a 64-bit `mrs` returning the value as `u64`.
 #[macro_export]
 macro_rules! read_sysreg {
     ($name:ident) => {{
@@ -8,27 +11,69 @@ macro_rules! read_sysreg {
             core::arch::asm!(
                 concat!("mrs {}, ", stringify!($name)),
                 out(reg) val,
-                options(nomem, nostack, preserves_flags)
+                options(nomem, nostack, preserves_flags),
             );
         }
         val
     }};
 }
 
+/// Write a 64-bit value to a system register by name.
+///
+/// e.g. `write_sysreg!(vbar_el1, addr)`.
 #[macro_export]
 macro_rules! write_sysreg {
     ($name:ident, $val:expr) => {{
         let v: u64 = $val;
         unsafe {
             core::arch::asm!(
-                concat!("msr", stringify!($name), ", {}"),
+                concat!("msr ", stringify!($name), ", {}"),
                 in(reg) v,
-                options(nomem, nostack)
+                options(nomem, nostack),
             );
         }
     }};
 }
 
+/// Exception Syndrome Register (`ESR_EL1`) value.
+///
+/// Bit layout: `EC[31:26]`, `IL[25]`, `ISS[24:0]`. Helpers below
+/// decode the standard sub-fields without exposing the raw integer
+/// arithmetic to call sites.
+#[derive(Debug, Copy, Clone)]
+pub struct Esr(u64);
+
+impl Esr {
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+
+    /// `EC` field — coarse classifier (load it through `class()` for an enum).
+    pub const fn ec_raw(self) -> u8 {
+        ((self.0 >> 26) & 0x3F) as u8
+    }
+
+    pub fn class(self) -> ExceptionClass {
+        ExceptionClass::from_ec(self.ec_raw())
+    }
+
+    /// Instruction Length: true if the trapped instruction was 32-bit,
+    /// false if 16-bit (T32).
+    pub const fn il(self) -> bool {
+        (self.0 >> 25) & 1 != 0
+    }
+
+    /// Instruction-specific syndrome bits. Interpretation depends on `EC`.
+    pub const fn iss(self) -> u32 {
+        (self.0 & 0x01FF_FFFF) as u32
+    }
+}
+
+/// Exception class decoded from `ESR_EL1.EC`.
 #[derive(Debug, Clone, Copy)]
 pub enum ExceptionClass {
     Unknown,
@@ -46,8 +91,8 @@ pub enum ExceptionClass {
 }
 
 impl ExceptionClass {
-    pub fn from_esr(esr: u64) -> Self {
-        let ec = ((esr >> 26) & 0x3f) as u8;
+    /// Construct from the raw 6-bit `EC` field of `ESR_EL1`.
+    pub fn from_ec(ec: u8) -> Self {
         match ec {
             0x00 => Self::Unknown,
             0x07 => Self::TrappedFp,
@@ -63,9 +108,12 @@ impl ExceptionClass {
             other => Self::Other(other),
         }
     }
-}
 
-impl ExceptionClass {
+    /// Convenience wrapper preserved for callers that already have a raw ESR.
+    pub fn from_esr(esr: u64) -> Self {
+        Esr::new(esr).class()
+    }
+
     pub fn description(&self) -> &'static str {
         match self {
             Self::Unknown => "Unknown reason (e.g. udf instruction)",
