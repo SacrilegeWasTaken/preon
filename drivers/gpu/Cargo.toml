@@ -1,0 +1,13 @@
+[package]
+name = "drivers_gpu"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "drivers_gpu"
+path = "lib.rs"
+test = false
+bench = false
+
+[dependencies]

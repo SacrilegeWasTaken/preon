@@ -1,0 +1,13 @@
+[package]
+name = "userspace_console"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "userspace_console"
+path = "lib.rs"
+test = false
+bench = false
+
+[dependencies]

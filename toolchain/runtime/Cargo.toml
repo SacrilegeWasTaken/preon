@@ -1,0 +1,13 @@
+[package]
+name = "toolchain_runtime"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "toolchain_runtime"
+path = "lib.rs"
+test = false
+bench = false
+
+[dependencies]

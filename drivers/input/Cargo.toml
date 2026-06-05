@@ -1,0 +1,13 @@
+[package]
+name = "drivers_input"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "drivers_input"
+path = "lib.rs"
+test = false
+bench = false
+
+[dependencies]

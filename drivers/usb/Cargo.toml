@@ -1,0 +1,13 @@
+[package]
+name = "drivers_usb"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "drivers_usb"
+path = "lib.rs"
+test = false
+bench = false
+
+[dependencies]

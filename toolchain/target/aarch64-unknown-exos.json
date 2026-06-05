@@ -1,0 +1,9 @@
+{
+  "_comment": [
+    "Placeholder rustc target spec for ExOS userspace.",
+    "Concrete fields are filled in when Phase 6 starts and the syscall",
+    "ABI is nailed down. Until then this file is intentionally empty so",
+    "rustc rejects --target pointing at it — we don't want anyone to",
+    "accidentally build against a half-defined target."
+  ]
+}
