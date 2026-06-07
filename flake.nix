@@ -29,7 +29,7 @@
         # cargo build --release + llvm-objcopy into build/Image.
         buildImage = pkgs.writeShellScriptBin "exos-build" ''
           set -euo pipefail
-          export PATH="${rustToolchain}/bin:${pkgs.llvm}/bin:$PATH"
+          export PATH="${rustToolchain}/bin:${pkgs.llvmPackages_latest.llvm}/bin:$PATH"
           cargo build --release
           mkdir -p build
           llvm-objcopy -O binary \
@@ -59,7 +59,7 @@
         devShells.default = pkgs.mkShell {
           buildInputs = [
             rustToolchain
-            pkgs.llvm
+            pkgs.llvmPackages_latest.llvm
             pkgs.qemu
           ];
 

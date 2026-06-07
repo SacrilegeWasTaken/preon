@@ -7,8 +7,8 @@ members = [
   "kernel/arch",
   "kernel/exceptions",
   "kernel/cpu",
-  "kernel/mm"
-#"drivers",
+  "kernel/mm",
+#"rivers",
 #"toolchain",
 ]
 

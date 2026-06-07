@@ -33,6 +33,46 @@ on the QEMU `virt` machine. No external crates (excluding fdt because I'm not
 a psycho) — just `core` and a `global_asm!` boot stub. The goal is to write a 
 micro-kernel referencing freebsd(mostly)/seL4/linux kernels code.
 
+## Build & run
+
+The only host requirement is [Nix](https://nixos.org/download) with
+flakes enabled. The flake provides a pinned Rust toolchain (with the
+`aarch64-unknown-none` target), LLVM, and QEMU — nothing else needs to
+exist on `$PATH`.
+
+```
+make shell    # nix develop  — interactive dev shell with all tooling
+make build    # nix run .#build — cargo build --release + llvm-objcopy → build/Image
+make run      # nix run .#run   — build, then qemu-system-aarch64 with our flags
+make clean    # nix run .#clean — cargo clean + rm build/
+```
+
+`make` is a thin wrapper around `nix run .#…`; use whichever you prefer.
+Extra QEMU flags can be passed through:
+
+```
+nix run .#run -- -d guest_errors,unimp -D /tmp/qemu.log
+```
+
+Exit QEMU with `Ctrl-A` then `x`.
+
+### Without Nix
+
+If you'd rather use your own toolchain, install:
+
+- Rust (stable) with target `aarch64-unknown-none`,
+  `rust-src` and `llvm-tools-preview` components,
+- LLVM (for `llvm-objcopy`),
+- QEMU (with `aarch64` system emulation).
+
+Then:
+
+```
+cargo build --release
+llvm-objcopy -O binary target/aarch64-unknown-none/release/kernel build/Image
+qemu-system-aarch64 -M virt -cpu cortex-a72 -smp 4 -m 128M -nographic -kernel build/Image
+```
+
 ## Waypoints
 
 The plan is grouped into phases. Each phase unlocks the next: nothing further

@@ -1,29 +1,25 @@
-.PHONY: build image run-qemu run clean
+.PHONY: build image run clean shell help
 
-BUILD_DIR := build
-KERNEL_ELF := target/aarch64-unknown-none/release/kernel
-KERNEL_IMG := $(BUILD_DIR)/Image
+help:
+	@echo "exos make targets (thin wrappers around flake.nix):"
+	@echo "  make build    nix run .#build   — cargo + llvm-objcopy → build/Image"
+	@echo "  make image    alias for build"
+	@echo "  make run      nix run .#run     — build + qemu"
+	@echo "  make clean    nix run .#clean   — cargo clean + rm build/"
+	@echo "  make shell    nix develop       — interactive dev shell"
+	@echo ""
+	@echo "Direct cargo / qemu usage is fine too; flake just pins tooling."
 
 build:
-	cargo build --release
+	nix run .#build
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+image: build
 
-image: $(BUILD_DIR) build
-	nix shell nixpkgs#llvm --command \
-		llvm-objcopy -O binary $(KERNEL_ELF) $(KERNEL_IMG)
-
-run-qemu: image
-	qemu-system-aarch64 \
-		-M virt \
-		-cpu cortex-a72 \
-		-m 256M \
-		-smp cores=4\
-		-nographic \
-		-kernel $(KERNEL_IMG)
-
-run: clean run-qemu clean
+run:
+	nix run .#run
 
 clean:
-	rm -rf $(BUILD_DIR)
+	nix run .#clean
+
+shell:
+	nix develop
