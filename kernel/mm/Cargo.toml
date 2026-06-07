@@ -1,0 +1,15 @@
+[package]
+name = "kernel_mm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "kernel_mm"
+path = "lib.rs"
+test = false
+bench = false
+
+[dependencies]
+kernel_builtin.workspace = true
+kernel_arch.workspace = true
