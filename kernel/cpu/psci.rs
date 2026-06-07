@@ -1,4 +1,5 @@
 use fdt::Fdt;
+use kernel_arch::PhysAddr;
 
 use crate::types::Mpidr;
 
@@ -68,10 +69,15 @@ impl Psci {
         Some(Self { method, cpu_on_id })
     }
 
-    /// Wake the CPU identified by `mpidr`. `entry` is the physical address
-    /// jumped to on the secondary, `ctx` is passed in `x0`.
-    pub fn cpu_on(&self, mpidr: Mpidr, entry: u64, ctx: u64) -> Result<(), PsciError> {
-        let code = self.raw_call(self.cpu_on_id, mpidr.raw(), entry, ctx);
+    /// Wake the CPU identified by `mpidr`. `entry` is the physical entry
+    /// point on the secondary, `ctx` becomes its `x0` on first run.
+    pub fn cpu_on(
+        &self,
+        mpidr: Mpidr,
+        entry: PhysAddr,
+        ctx: PhysAddr,
+    ) -> Result<(), PsciError> {
+        let code = self.raw_call(self.cpu_on_id, mpidr.raw(), entry.as_u64(), ctx.as_u64());
         if code == 0 {
             Ok(())
         } else {
@@ -82,6 +88,7 @@ impl Psci {
     fn raw_call(&self, fn_id: u32, a1: u64, a2: u64, a3: u64) -> i64 {
         let fn_id = fn_id as u64;
         match self.method {
+            // CPU branch predictor will definetely optimize this for us
             Method::Hvc => psci_call!("hvc #0", fn_id, a1, a2, a3),
             Method::Smc => psci_call!("smc #0", fn_id, a1, a2, a3),
         }

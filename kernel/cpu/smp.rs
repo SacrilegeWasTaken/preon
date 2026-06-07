@@ -1,6 +1,7 @@
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU64, Ordering};
 
+use kernel_arch::PhysAddr;
 use kernel_builtin::{kernel_uart_log, wfe_loop};
 
 use crate::psci::{Psci, PsciError};
@@ -13,10 +14,23 @@ pub const STACK_SIZE: usize = 64 * 1024;
 ///
 /// Layout matches what the assembler trampoline expects when reading
 /// the pointer published through `install_current_cpu_local`.
-#[repr(C, align(64))]
+///
+/// Align(128) is performance critical. It's a cacheline alignment.
+/// When CPU0 is writing `CPU_DATA[0]` -> cache coherency making
+/// the whole line CPU0 exclusive, so CPU1 losing it's copy in cache.
+/// So cacheline alignment preventing ping-pong effect between CPUs.
+/// Locally data is independent. If they are physically sharing once
+/// cacheline -> every write operation is a performance hit!
+///
+/// - Apple M1/M2/M3... has 128 byte cacheline
+/// - Cortex-A53/A57/A72/A75/A76/A77/A78/X1 - 64 bytes
+///
+/// Align(128) is safe across platforms. The memory cost is
+/// 2KB in `.bss` section for each 16 CPUs. Nothing.
+#[repr(C, align(128))]
 pub struct CpuData {
-    pub cpu_id: u32,
-    pub mpidr: u64,
+    pub cpu_id: CpuId,
+    pub mpidr: Mpidr,
     pub stack_top: usize,
 }
 
@@ -39,12 +53,21 @@ unsafe impl Sync for CpuStack {}
 struct BootDataCell(UnsafeCell<SecondaryBootData>);
 unsafe impl Sync for BootDataCell {}
 
+/// Bitmap. Will be explained later (or deleted)
+/// # Deletion reason:
+/// The whole SMP setup is very inefficient for 32+
+/// cpus because of static and their affect on memory.
+/// Using allocator can be a better option so we can
+/// support a lot's of CPU cores/sockers/clusters.
 static CPU_ONLINE: AtomicU64 = AtomicU64::new(0);
 
+/// # Safety
+///
+/// Each CPU writing into it's own region.
 static CPU_DATA: [CpuDataCell; MAX_CPUS] = [const {
     CpuDataCell(UnsafeCell::new(CpuData {
-        cpu_id: 0,
-        mpidr: 0,
+        cpu_id: CpuId::PRIMARY,
+        mpidr: Mpidr::new(0),
         stack_top: 0,
     }))
 }; MAX_CPUS];
@@ -52,6 +75,9 @@ static CPU_DATA: [CpuDataCell; MAX_CPUS] = [const {
 static SECONDARY_STACKS: [CpuStack; MAX_CPUS] =
     [const { CpuStack(UnsafeCell::new([0u8; STACK_SIZE])) }; MAX_CPUS];
 
+/// # Safety
+///
+/// Each CPU writing into it's own region
 static BOOT_DATA: [BootDataCell; MAX_CPUS] = [const {
     BootDataCell(UnsafeCell::new(SecondaryBootData {
         cpu_data_ptr: core::ptr::null(),
@@ -90,6 +116,11 @@ impl Smp {
         CPU_ONLINE.load(Ordering::Acquire) & (1u64 << cpu.raw()) != 0
     }
 
+    /// Read the current CPU's control block via `TPIDR_EL1`.
+    pub fn current() -> &'static CpuData {
+        current_cpu()
+    }
+
     /// Spin until `cpu` calls `mark_online`.
     pub fn wait_for(cpu: CpuId) {
         while !Self::is_online(cpu) {
@@ -102,8 +133,8 @@ impl Smp {
     pub fn init_cpu(cpu: CpuId, mpidr: Mpidr) {
         let ptr = CPU_DATA[cpu.as_usize()].0.get();
         unsafe {
-            (*ptr).cpu_id = cpu.raw();
-            (*ptr).mpidr = mpidr.raw();
+            (*ptr).cpu_id = cpu;
+            (*ptr).mpidr = mpidr;
             (*ptr).stack_top = Self::stack_top(cpu);
         }
     }
@@ -115,10 +146,18 @@ impl Smp {
         base + STACK_SIZE
     }
 
-    /// Pointer to `cpu`'s control block. Safe to publish to `TPIDR_EL1`
-    /// once `init_cpu` has run for the same `cpu`.
-    pub fn cpu_data(cpu: CpuId) -> *const CpuData {
-        CPU_DATA[cpu.as_usize()].0.get()
+    /// Reference to `cpu`'s control block. Valid for the lifetime of the
+    /// kernel — `CPU_DATA` lives in `.bss` forever.
+    pub fn cpu_data(cpu: CpuId) -> &'static CpuData {
+        // Safety: each CpuData slot is written only by `init_cpu` (called
+        // by the primary before the corresponding CPU starts running) and
+        // read everywhere else. UnsafeCell + 'static lifetime is sound.
+        unsafe { &*CPU_DATA[cpu.as_usize()].0.get() }
+    }
+
+    /// Publish `cpu`'s control block to `TPIDR_EL1` on the calling CPU.
+    pub fn install_current(cpu: CpuId) {
+        install_current_cpu_local(Self::cpu_data(cpu));
     }
 
     /// Fill the static `BOOT_DATA` slot for `cpu` and return a pointer
@@ -126,15 +165,15 @@ impl Smp {
     pub fn prepare_boot_data(cpu: CpuId) -> *const SecondaryBootData {
         let ptr = BOOT_DATA[cpu.as_usize()].0.get();
         unsafe {
-            (*ptr).cpu_data_ptr = Self::cpu_data(cpu);
+            (*ptr).cpu_data_ptr = Self::cpu_data(cpu) as *const CpuData;
             (*ptr).stack_top = Self::stack_top(cpu);
         }
         ptr as *const _
     }
 
     /// Physical address of the assembler trampoline secondaries land in.
-    pub fn entry_addr() -> u64 {
-        secondary_entry as *const () as u64
+    pub fn entry_addr() -> PhysAddr {
+        PhysAddr::new(secondary_entry as *const () as usize)
     }
 
     /// Bring up every secondary CPU listed in the device tree. The primary
@@ -147,7 +186,7 @@ impl Smp {
         let primary_mpidr = Mpidr::current();
 
         Self::init_cpu(CpuId::PRIMARY, primary_mpidr);
-        install_current_cpu_local(Self::cpu_data(CpuId::PRIMARY));
+        Self::install_current(CpuId::PRIMARY);
         Self::mark_online(CpuId::PRIMARY);
 
         let mut next_idx: u32 = 1;
@@ -162,7 +201,7 @@ impl Smp {
 
             let cpu = CpuId::new(next_idx);
             Self::init_cpu(cpu, mpidr);
-            let ctx = Self::prepare_boot_data(cpu) as u64;
+            let ctx = PhysAddr::new(Self::prepare_boot_data(cpu) as usize);
 
             // Make the writes above visible to the secondary before it
             // ever loads from BOOT_DATA / CPU_DATA.
@@ -182,9 +221,9 @@ impl Smp {
 /// Install the per-CPU pointer in `TPIDR_EL1`.
 ///
 /// Called from `secondary.asm` on every secondary right after its stack
-/// is set, and from `Smp::bring_up_all` for the primary.
+/// is set, and from `Smp::install_current` for the primary.
 #[unsafe(no_mangle)]
-pub extern "C" fn install_current_cpu_local(ptr: *const CpuData) {
+extern "C" fn install_current_cpu_local(ptr: *const CpuData) {
     unsafe {
         core::arch::asm!(
             "msr tpidr_el1, {0}",
@@ -197,10 +236,13 @@ pub extern "C" fn install_current_cpu_local(ptr: *const CpuData) {
 
 /// Read the current CPU's control block via `TPIDR_EL1`.
 ///
+/// Prefer [`Smp::current`] in new code; kept as a free function so it
+/// can be reached from places that don't pull in the `Smp` facade.
+///
 /// # Safety
-/// The caller asserts that `install_current_cpu_local` has already run
-/// on this CPU. Otherwise `TPIDR_EL1` points to garbage.
-pub fn current_cpu() -> &'static CpuData {
+/// The caller asserts that the current CPU went through bring-up so
+/// `TPIDR_EL1` points at a valid `CpuData`.
+fn current_cpu() -> &'static CpuData {
     let ptr: *const CpuData;
     unsafe {
         core::arch::asm!(
@@ -216,9 +258,13 @@ pub fn current_cpu() -> &'static CpuData {
 /// enabled FP/SIMD, set `VBAR_EL1`, switched to the per-CPU stack, and
 /// installed the per-CPU pointer.
 #[unsafe(no_mangle)]
-pub extern "C" fn secondary_cpu_main(_boot_data: &SecondaryBootData) -> ! {
-    let cpu = current_cpu();
-    kernel_uart_log!("CPU {} online (mpidr={:#x})", cpu.cpu_id, cpu.mpidr);
-    Smp::mark_online(CpuId::new(cpu.cpu_id));
+extern "C" fn secondary_cpu_main(_boot_data: &SecondaryBootData) -> ! {
+    let cpu = Smp::current();
+    kernel_uart_log!(
+        "CPU {} online (mpidr={:#x})",
+        cpu.cpu_id.raw(),
+        cpu.mpidr.raw()
+    );
+    Smp::mark_online(cpu.cpu_id);
     wfe_loop!()
 }
