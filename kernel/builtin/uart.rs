@@ -15,9 +15,11 @@ use crate::sync::SpinLock;
 
 const UART_BASE: usize = 0x0900_0000;
 
-// =============================================================================
-// Registers
-// =============================================================================
+/*
+ *
+ * REGISRERS
+ *
+ */
 
 /// Data Register. The low byte on write is sent out TX; on read it returns
 /// the next byte from RX with error bits in the high half.
@@ -62,9 +64,11 @@ pub const UART_ICR: Reg<InterruptFlags, WriteOnly> = unsafe { Reg::new(UART_BASE
 /// DMA Control.
 pub const UART_DMACR: Reg<u32, ReadWrite> = unsafe { Reg::new(UART_BASE + 0x048) };
 
-// =============================================================================
-// Flag types
-// =============================================================================
+/*
+ *
+ * FLAG TYPES
+ *
+ */
 
 /// Boilerplate for a newtype that holds a bit-set over `u32`. Each
 /// invocation declares the type, its associated constants, and the
@@ -220,9 +224,11 @@ bitflags_u32! {
     }
 }
 
-// =============================================================================
-// Drivers
-// =============================================================================
+/*
+ *
+ * DRIVERS
+ *
+ */
 
 /// Zero-sized handle for direct, lock-free MMIO writes. Used by panic
 /// and exception paths where taking the lock could deadlock.
@@ -260,9 +266,11 @@ impl fmt::Write for UartDriver {
 
 pub static UART: SpinLock<UartDriver> = SpinLock::new(UartDriver { raw: UartRaw });
 
-// =============================================================================
-// Print macros
-// =============================================================================
+/*
+ *
+ * PRINT MACROS
+ *
+ */
 
 #[macro_export]
 macro_rules! kernel_uart_log {

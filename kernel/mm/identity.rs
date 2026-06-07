@@ -22,9 +22,11 @@ use crate::attrs::MemoryAttr;
 use crate::frame::{alloc_page, PhysAddr, VirtAddr};
 use crate::page_table::{Access, Executable, LeafAttrs, Level, PageTable, Shareability};
 
-//
-// Region constants
-//
+/*
+*
+* REGION CONSTANTS
+*
+*/
 
 /// Physical base of the QEMU `virt` RAM region.
 const RAM_BASE: usize = 0x4000_0000;
@@ -39,9 +41,11 @@ const UART_BASE: usize = 0x0900_0000;
 /// 2 MiB — block size we use at level 2 when covering RAM.
 const BLOCK_2MB: usize = 2 * 1024 * 1024;
 
-//
-// Attribute presets
-//
+/*
+*
+* ATTRIBUTE PRESETS
+*
+*/
 
 /// Normal kernel RAM. Read/write at EL1, executable at EL1 (refined
 /// later once `.text` / `.data` boundaries are wired through), inner
@@ -63,9 +67,11 @@ const DEVICE_UART: LeafAttrs = LeafAttrs {
     execute: Executable::None,
 };
 
-//
-// Builder
-//
+/*
+*
+* BUILDER
+*
+*/
 
 /// Allocate a fresh root table, install every identity mapping the
 /// kernel needs to survive `SCTLR.M = 1`, and return the physical

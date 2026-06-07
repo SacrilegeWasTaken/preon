@@ -21,7 +21,11 @@
 use crate::attrs::MemoryAttr;
 use crate::frame::{PhysAddr, VirtAddr};
 
-// Type bits (bits 0:1)
+/*
+*
+* Type bits (bits 0:1)
+*
+*/
 
 /// Bit 0 — the entry is in use. A zero here means MMU treats the entry
 /// as invalid regardless of the other bits.
