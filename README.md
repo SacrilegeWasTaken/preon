@@ -16,8 +16,6 @@
 ![style](https://img.shields.io/badge/style-microkernel-purple)
 ![status](https://img.shields.io/badge/status-bring--up-yellow)
 
----
-
 ## DISCLAIMER! A note on AI slop
 
 Code in this repo is written line by line by me, with LLM assistance
