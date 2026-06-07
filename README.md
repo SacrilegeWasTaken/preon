@@ -1,12 +1,12 @@
 <div align="center">
 
-```                               
-███████╗██╗  ██╗ ██████╗  
-██╔════╝╚██╗██╔╝██╔═══██╗ 
-█████╗   ╚███╔╝ ██║   ██║ 
-██╔══╝   ██╔██╗ ██║   ██║ 
-███████╗██╔╝ ██╗╚██████╔╝ 
-╚══════╝╚═╝  ╚═╝ ╚═════╝  
+```
+███████╗██╗  ██╗ ██████╗ ███████╗
+██╔════╝╚██╗██╔╝██╔═══██╗██╔════╝
+█████╗   ╚███╔╝ ██║   ██║███████╗
+██╔══╝   ██╔██╗ ██║   ██║╚════██║
+███████╗██╔╝ ██╗╚██████╔╝███████║
+╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 ```
 
 ![arch](https://img.shields.io/badge/arch-aarch64-blue)
@@ -16,16 +16,18 @@
 ![style](https://img.shields.io/badge/style-microkernel-purple)
 ![status](https://img.shields.io/badge/status-bring--up-yellow)
 
+---
 
 ## DISCLAIMER! A note on AI slop
 
 Code in this repo is written line by line by me, with LLM assistance
 for spec lookup, code review, and doc writing. Every commit reflects 
 a design I can explain and defend without prompts. This isn't a generated
-kernel - it's a hand-built one with a smart reference assistat.
+kernel — it's a hand-built one with a smart reference assistant.
 
 </div>
 
+---
 ## Overview
 
 The real working kernel written from scratch in Rust for the ARMv8-A architecture, booting
