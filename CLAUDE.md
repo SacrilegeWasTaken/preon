@@ -34,12 +34,12 @@ The goal is to educate the developer, not to do the work for them.
 
 When separating logical sections within a single file, use **only** this format:
 
-\```rust
+```rust
 /*
  *
  *  Section Name
  *
  */
-\```
+```
 
 No other section separator styles are permitted.
