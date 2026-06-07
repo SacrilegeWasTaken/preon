@@ -71,14 +71,19 @@ makes sense until its prerequisites are in place.
 - [x] Primary CPU enumerates secondaries from DTB and brings them up (`Smp::bring_up_all`)
 - [ ] IPI (inter-processor interrupt) framework — deferred until GIC lands
 
-### Phase 3 — Virtual memory
+### Phase 3 — Virtual memory (current)
 
-- [ ] Physical frame allocator (bitmap)
-- [ ] Page table walker / builder for 4-level AArch64 translation
-- [ ] `MAIR_EL1`, `TCR_EL1`, `TTBR0_EL1`, `TTBR1_EL1` configuration
-- [ ] Identity-mapped boot transition into MMU, kernel relocated to upper half
-- [ ] TLB invalidation primitives (`tlbi`, with the right `dsb`/`isb`)
+- [x] Bootstrap bump frame allocator (static pool, replaced later by bitmap)
+- [x] Page table walker / builder for 4-level AArch64 translation,
+      typed `Level`/`Access`/`Shareability`/`Executable`/`LeafAttrs`
+- [x] `MAIR_EL1`, `TCR_EL1`, `TTBR0_EL1` configuration
+- [x] Identity-mapped boot transition into MMU (RAM + UART)
+- [x] TLB invalidation primitives (`tlbi vmalle1is`, `dsb ish` / `isb`)
+- [ ] Bitmap physical frame allocator (replaces bump)
+- [ ] Refine kernel mapping: `.text` RO+X, `.data`/`.bss` RW+NX via linker symbols
+- [ ] Identity-map secondaries' page tables (bring up MMU on secondary CPUs)
 - [ ] Kernel heap allocator (`#[global_allocator]`), `alloc` available
+- [ ] Kernel relocation to upper half through TTBR1
 - [ ] Per-CPU IRQ stacks, guard pages
 - [ ] Page-fault handler hook in `el1_sync` / `el0_sync`
 
