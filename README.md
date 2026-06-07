@@ -1,14 +1,12 @@
 <div align="center">
 
-```
-                             
-                             
-   ███████╗██╗  ██╗ ██████╗  
-   ██╔════╝╚██╗██╔╝██╔═══██╗ 
-   █████╗   ╚███╔╝ ██║   ██║ 
-   ██╔══╝   ██╔██╗ ██║   ██║ 
-   ███████╗██╔╝ ██╗╚██████╔╝ 
-   ╚══════╝╚═╝  ╚═╝ ╚═════╝  
+```                               
+███████╗██╗  ██╗ ██████╗  
+██╔════╝╚██╗██╔╝██╔═══██╗ 
+█████╗   ╚███╔╝ ██║   ██║ 
+██╔══╝   ██╔██╗ ██║   ██║ 
+███████╗██╔╝ ██╗╚██████╔╝ 
+╚══════╝╚═╝  ╚═╝ ╚═════╝  
 ```
 
 ![arch](https://img.shields.io/badge/arch-aarch64-blue)
@@ -18,6 +16,14 @@
 ![style](https://img.shields.io/badge/style-microkernel-purple)
 ![status](https://img.shields.io/badge/status-bring--up-yellow)
 
+
+## DISCLAIMER! A note on AI slop
+
+Code in this repo is written line by line by me, with LLM assistance
+for spec lookup, code review, and doc writing. Every commit reflects 
+a design I can explain and defend without prompts. This isn't a generated
+kernel - it's a hand-built one with a smart reference assistat.
+
 </div>
 
 ## Overview
@@ -25,10 +31,7 @@
 The real working kernel written from scratch in Rust for the ARMv8-A architecture, booting
 on the QEMU `virt` machine. No external crates (excluding fdt because I'm not 
 a psycho) — just `core` and a `global_asm!` boot stub. The goal is to write a 
-micro-kernel referencing freebsd(mostly)/seL4/linux kernels code. No LLM codegen 
-was ever used, but, LLMs WILL be used to write docs, and they ARE used to search 
-ARMv8-A docs and for general OS-dev educational purposes. I'm just too lazy to
-educate myself the old-fashioned way.
+micro-kernel referencing freebsd(mostly)/seL4/linux kernels code.
 
 ## Waypoints
 
