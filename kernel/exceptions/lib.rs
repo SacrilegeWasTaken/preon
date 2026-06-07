@@ -2,7 +2,7 @@
 
 use core::arch::global_asm;
 
-use kernel_arch::{read_sysreg, Esr};
+use kernel_arch::{read_sysreg, Esr, Spsr, VirtAddr};
 use kernel_builtin::{kernel_uart_direct_log, wfe_loop};
 
 /// CPU snapshot saved at exception entry and restored on `eret`.
@@ -30,21 +30,38 @@ impl TrapFrame {
     pub const SPSR_OFFSET: usize = 31 * 8 + 16;
     pub const FRAME_SIZE: usize = 272;
 
+    /// PC the interrupted code will resume at, decoded as a virtual address.
+    pub fn elr(&self) -> VirtAddr {
+        VirtAddr::new(self.elr_el1 as usize)
+    }
+
+    /// EL0 stack pointer at the time of exception. Meaningful only when
+    /// the exception came from EL0.
+    pub fn user_sp(&self) -> VirtAddr {
+        VirtAddr::new(self.sp_el0 as usize)
+    }
+
+    /// Saved `PSTATE` at the moment of exception.
+    pub fn spsr(&self) -> Spsr {
+        Spsr::from_raw(self.spsr_el1)
+    }
+
     /// Pretty-print the frame to the emergency UART. Used by handlers
     /// that have no good way to recover.
     pub fn dump(&self, label: &str) {
-        let esr = Esr::new();
-        let far = read_sysreg!(far_el1);
+        let esr = Esr::current();
+        let far = VirtAddr::new(read_sysreg!(far_el1) as usize);
+        let spsr = self.spsr();
 
         kernel_uart_direct_log!("");
         kernel_uart_direct_log!("=== {} ===", label);
         kernel_uart_direct_log!("Class    : {:?} ({:#04x})", esr.class(), esr.ec_raw());
         kernel_uart_direct_log!("Reason   : {}", esr.class().description());
         kernel_uart_direct_log!("ESR_EL1  : {:#018x}", esr.raw());
-        kernel_uart_direct_log!("ELR_EL1  : {:#018x}", self.elr_el1);
+        kernel_uart_direct_log!("ELR_EL1  : {:#018x}", self.elr());
         kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
-        kernel_uart_direct_log!("SPSR_EL1 : {:#018x}", self.spsr_el1);
-        kernel_uart_direct_log!("SP_EL0   : {:#018x}", self.sp_el0);
+        kernel_uart_direct_log!("SPSR_EL1 : {:#018x} ({:?})", spsr, spsr.mode());
+        kernel_uart_direct_log!("SP_EL0   : {:#018x}", self.user_sp());
         for (i, x) in self.x.iter().enumerate() {
             kernel_uart_direct_log!("x{:<2}      : {:#018x}", i, x);
         }
@@ -65,12 +82,12 @@ unsafe extern "C" {
 /// may carry stale values from an earlier exception; surface them anyway
 /// because they're often the most useful clue.
 pub fn panic_dump(info: &core::panic::PanicInfo) {
-    let esr = Esr::new();
-    let elr = read_sysreg!(elr_el1);
-    let far = read_sysreg!(far_el1);
-    let spsr = read_sysreg!(spsr_el1);
+    let esr = Esr::current();
+    let elr = VirtAddr::new(read_sysreg!(elr_el1) as usize);
+    let far = VirtAddr::new(read_sysreg!(far_el1) as usize);
+    let spsr = Spsr::from_raw(read_sysreg!(spsr_el1));
     let mpidr = read_sysreg!(mpidr_el1);
-    let sp: u64;
+    let sp: usize;
     unsafe {
         core::arch::asm!(
             "mov {}, sp",
@@ -78,6 +95,7 @@ pub fn panic_dump(info: &core::panic::PanicInfo) {
             options(nomem, nostack, preserves_flags),
         );
     }
+    let sp = VirtAddr::new(sp);
 
     kernel_uart_direct_log!("");
     kernel_uart_direct_log!("=== KERNEL PANIC ===");
@@ -96,7 +114,7 @@ pub fn panic_dump(info: &core::panic::PanicInfo) {
     kernel_uart_direct_log!("Reason   : {}", esr.class().description());
     kernel_uart_direct_log!("ELR_EL1  : {:#018x}", elr);
     kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
-    kernel_uart_direct_log!("SPSR_EL1 : {:#018x}", spsr);
+    kernel_uart_direct_log!("SPSR_EL1 : {:#018x} ({:?})", spsr, spsr.mode());
 }
 
 /// Public interface to the kernel's exception vector table.
