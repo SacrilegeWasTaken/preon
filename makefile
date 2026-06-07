@@ -18,7 +18,7 @@ run-qemu: image
 	qemu-system-aarch64 \
 		-M virt \
 		-cpu cortex-a72 \
-		-m 128M \
+		-m 256M \
 		-smp cores=4\
 		-nographic \
 		-kernel $(KERNEL_IMG)
