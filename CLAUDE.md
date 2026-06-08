@@ -4,8 +4,8 @@
 
 Exos is a microkernel designed to match the functionality of production kernels
 as closely as possible. It supports two configurations:
-- **Standalone** — runs as an independent system
-- **Hybrid** — runs alongside Linux (similar to Apple's XNU architecture)
+- **Standalone** — runs as an independent system with only native ABI apps.
+- **LINUX ABI compat** - read docs/IDEA.md to understand whole system.
 
 This repository contains the standalone implementation of Exos.
 
