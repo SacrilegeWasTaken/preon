@@ -15,6 +15,15 @@ SECTIONS {
     __boot_end = .;
     __boot_bss_start = .;
    .boot.bss (NOLOAD) : {
+        . = ALIGN(4096);
+        __idmap_l0      = .;    . += 0x1000;
+        __idmap_l1      = .;    . += 0x1000;
+        __idmap_l2_uart = .;    . += 0x1000;
+        __idmap_l3_uart = .;    . += 0x1000;
+        __idmap_l2_ram  = .;    . += 0x1000;
+        __kernel_l0     = .;    . += 0x1000;
+        __kernel_l1     = .;    . += 0x1000;
+        __kernel_l2     = .;    . += 0x1000;
         *(.boot.bss .boot.bss.*)
     }
     . = ALIGN(4096);
