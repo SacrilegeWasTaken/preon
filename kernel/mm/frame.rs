@@ -24,6 +24,8 @@ static POOL: PagePool = PagePool(UnsafeCell::new([0; POOL_SIZE]));
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::layout::kernel_va_to_pa;
+
 /// Index of the next page to hand out. Lives in `.bss`, starts at 0.             
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
@@ -40,6 +42,7 @@ pub fn alloc_page() -> PhysAddr {
     if idx >= POOL_PAGES {
         panic!("bootstrap frame allocator exhausted ({} pages)", POOL_PAGES);
     }
-    let base = POOL.0.get() as usize;
-    PhysAddr::new(base + idx * PAGE_SIZE)
+    let base_va = VirtAddr::new(POOL.0.get() as usize);
+    let base_pa = kernel_va_to_pa(base_va);
+    PhysAddr::new(base_pa.as_usize() + idx * PAGE_SIZE)
 }

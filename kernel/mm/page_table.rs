@@ -307,7 +307,8 @@ impl PageTable {
     /// reserved for use as a page table. The caller commits to not
     /// aliasing the same frame through any other mutable reference.
     pub unsafe fn from_phys(pa: PhysAddr) -> &'static mut PageTable {
-        unsafe { &mut *(pa.as_usize() as *mut PageTable) }
+        let va = crate::layout::pa_to_kernel_va(pa);
+        unsafe { &mut *(va.as_usize() as *mut PageTable) }
     }
 
     /// Read the entry indexed by `va` at `level`.
