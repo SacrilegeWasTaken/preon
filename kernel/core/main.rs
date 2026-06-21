@@ -32,9 +32,9 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
 
     let psci = Psci::from_fdt(&fdt).expect("PSCI node missing from DTB");
 
-    if let Err(e) = Smp::bring_up_all(&fdt, &psci) {
-        kernel_uart_log!("SMP bring-up failed: {:?}", e);
-    }
+    //if let Err(e) = Smp::bring_up_all(&fdt, &psci) {
+    //    kernel_uart_log!("SMP bring-up failed: {:?}", e);
+    //}
 
     kernel_uart_direct_log!("Triggering exception...");
     unsafe { core::arch::asm!("udf #0") }
