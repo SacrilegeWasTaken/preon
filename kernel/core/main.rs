@@ -22,7 +22,10 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
 
     // Safety: this is the very first call on a cold-booted CPU with
     // MMU off. Identity mappings cover everything the kernel touches.
-    unsafe { mmu::enable(); }
+    unsafe {
+        mmu::enable();
+    }
+
     kernel_uart_log!("MMU enabled");
 
     let fdt = unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }.expect("DTB error. Check QEMU conf.");

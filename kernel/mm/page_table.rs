@@ -20,6 +20,7 @@
 
 use crate::attrs::MemoryAttr;
 use crate::frame::{PhysAddr, VirtAddr};
+use crate::types::{FrameAllocator, Shareability};
 
 /*
 *
@@ -65,17 +66,6 @@ pub const AP_RO_EL1: u64 = 0b10 << AP_SHIFT;
 
 /// Read-only at both EL0 and EL1.
 pub const AP_RO_EL0_EL1: u64 = 0b11 << AP_SHIFT;
-
-// Shareability (bits 8:9)
-
-pub const SH_SHIFT: u64 = 8;
-
-pub const SH_NON_SHAREABLE: u64 = 0b00 << SH_SHIFT;
-pub const SH_OUTER_SHAREABLE: u64 = 0b10 << SH_SHIFT;
-
-/// Default for kernel mappings on SMP — all CPUs in the cluster snoop
-/// each other for this region.
-pub const SH_INNER_SHAREABLE: u64 = 0b11 << SH_SHIFT;
 
 // Access flag (bit 10)
 
@@ -178,26 +168,6 @@ impl Access {
     }
 }
 
-/// Cache-coherence domain of the mapped region.
-#[derive(Debug, Copy, Clone)]
-pub enum Shareability {
-    NonShareable,
-    OuterShareable,
-    /// All CPUs in the inner-shareable domain snoop each other. The
-    /// right choice for kernel mappings on SMP.
-    InnerShareable,
-}
-
-impl Shareability {
-    pub const fn bits(self) -> u64 {
-        match self {
-            Shareability::NonShareable => SH_NON_SHAREABLE,
-            Shareability::OuterShareable => SH_OUTER_SHAREABLE,
-            Shareability::InnerShareable => SH_INNER_SHAREABLE,
-        }
-    }
-}
-
 /// Who, if anyone, may fetch instructions from the mapped region.
 ///
 /// Encoded with the PXN / UXN bits; each variant sets the bits that
@@ -238,7 +208,7 @@ impl LeafAttrs {
     const fn bits(self) -> u64 {
         (self.memory.index() << ATTR_INDX_SHIFT)
             | self.access.bits()
-            | self.share.bits()
+            | self.share.bits() << 8
             | self.execute.bits()
             | AF
     }
@@ -358,7 +328,14 @@ impl PageTable {
     /// entry, 4 KiB). The walker assumes any existing intermediate
     /// entries are themselves tables — splitting an existing block to
     /// refine a sub-range is not supported during bring-up.
-    pub fn map(&mut self, va: VirtAddr, pa: PhysAddr, target: Level, attrs: LeafAttrs) {
+    pub fn map(
+        &mut self,
+        va: VirtAddr,
+        pa: PhysAddr,
+        target: Level,
+        attrs: LeafAttrs,
+        alloc: &mut impl FrameAllocator,
+    ) {
         assert!(target != Level::L0, "leaf entries cannot live at L0");
 
         let leaf = if matches!(target, Level::L3) {
@@ -374,7 +351,7 @@ impl PageTable {
             let entry = current.entry_at_mut(va, level);
             if !entry.is_valid() {
                 // Fresh frame to host the next-level table.
-                *entry = Entry::table(crate::frame::alloc_page());
+                *entry = Entry::table(alloc.alloc_page());
             } else {
                 assert!(
                     entry.is_table_or_page(),

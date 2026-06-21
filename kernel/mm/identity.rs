@@ -19,8 +19,9 @@
 //!     enable.
 
 use crate::attrs::MemoryAttr;
-use crate::frame::{alloc_page, PhysAddr, VirtAddr};
-use crate::page_table::{Access, Executable, LeafAttrs, Level, PageTable, Shareability};
+use crate::frame::{PhysAddr, VirtAddr};
+use crate::page_table::{Access, Executable, LeafAttrs, Level, PageTable};
+use crate::types::{FrameAllocator, Shareability};
 
 /*
 *
@@ -76,33 +77,40 @@ const DEVICE_UART: LeafAttrs = LeafAttrs {
 /// Allocate a fresh root table, install every identity mapping the
 /// kernel needs to survive `SCTLR.M = 1`, and return the physical
 /// address of the root table for installation into `TTBR0_EL1`.
-pub fn build() -> PhysAddr {
-    let root_pa = alloc_page();
+pub fn build(alloc: &mut impl FrameAllocator) -> PhysAddr {
+    let root_pa = alloc.alloc_page();
     // Safety: `alloc_page` returns a 4 KiB-aligned, zero-initialised
     // frame that no other reference observes during bring-up.
     let root = unsafe { PageTable::from_phys(root_pa) };
 
-    map_ram(root);
-    map_uart(root);
+    map_ram(root, alloc);
+    map_uart(root, alloc);
 
     root_pa
 }
 
 /// Identity-map the QEMU virt RAM region in 2 MiB blocks at level 2.
-fn map_ram(root: &mut PageTable) {
+fn map_ram(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
     let blocks = RAM_SIZE / BLOCK_2MB;
     for i in 0..blocks {
         let pa = RAM_BASE + i * BLOCK_2MB;
-        root.map(VirtAddr::new(pa), PhysAddr::new(pa), Level::L2, KERNEL_RAM);
+        root.map(
+            VirtAddr::new(pa),
+            PhysAddr::new(pa),
+            Level::L2,
+            KERNEL_RAM,
+            alloc,
+        );
     }
 }
 
 /// Identity-map the PL011 UART as a single 4 KiB device page at level 3.
-fn map_uart(root: &mut PageTable) {
+fn map_uart(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
     root.map(
         VirtAddr::new(UART_BASE),
         PhysAddr::new(UART_BASE),
         Level::L3,
         DEVICE_UART,
+        alloc,
     );
 }

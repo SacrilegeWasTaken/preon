@@ -11,100 +11,7 @@
 
 use kernel_arch::{flush_cpu_pipeline, write_sysreg};
 
-/*
- * Field positions (bit shifts inside TCR_EL1)
- */
-
-/// `T0SZ` — log2 of the unused VA bits in the low half. `T0SZ = 16`
-/// reserves bits [63:48] for the high half and leaves 48 usable bits.
-const T0SZ_SHIFT: u64 = 0;
-
-/// `IRGN0` — inner cacheability of page-table walks via TTBR0.
-const IRGN0_SHIFT: u64 = 8;
-
-/// `ORGN0` — outer cacheability of page-table walks via TTBR0.
-const ORGN0_SHIFT: u64 = 10;
-
-/// `SH0` — shareability domain for TTBR0 page-table accesses.
-const SH0_SHIFT: u64 = 12;
-
-/// `TG0` — granule (page size) for TTBR0. Encoding differs from `TG1`.
-const TG0_SHIFT: u64 = 14;
-
-/// `T1SZ` — same role as `T0SZ`, but for the high half.
-const T1SZ_SHIFT: u64 = 16;
-
-/// `EPD1` — when 1, disables TTBR1 table walks entirely.
-const EPD1_SHIFT: u64 = 23;
-
-/// `IRGN1` — inner cacheability of TTBR1 walks.
-const IRGN1_SHIFT: u64 = 24;
-
-/// `ORGN1` — outer cacheability of TTBR1 walks.
-const ORGN1_SHIFT: u64 = 26;
-
-/// `SH1` — shareability for TTBR1 walks.
-const SH1_SHIFT: u64 = 28;
-
-/// `TG1` — granule for TTBR1. Encoding differs from `TG0` — read carefully.
-const TG1_SHIFT: u64 = 30;
-
-/// `IPS` — Intermediate Physical Address size, common to both halves.
-const IPS_SHIFT: u64 = 32;
-
-/*
- * Field values
- */
-
-/// 48-bit virtual addresses (`T0SZ = T1SZ = 16`).
-const T0SZ_48BIT: u64 = 16;
-const T1SZ_48BIT: u64 = 16;
-
-/// Normal memory, write-back, read+write allocate. Applied to page-table
-/// walks themselves so the MMU's accesses are cached like ordinary RAM.
-const CACHEABILITY_WB_RWALLOC: u64 = 0b01;
-
-/// Inner-shareable domain — all CPUs in the same cluster snoop each other.
-const SHAREABILITY_INNER: u64 = 0b11;
-
-/// 4 KiB granule in the `TG0` encoding (`00`).
-const GRANULE_TG0_4KB: u64 = 0b00;
-
-/// 4 KiB granule in the `TG1` encoding (`10`). Differs from `TG0` and is
-/// a common source of subtle bring-up bugs — leave the comment alone.
-const GRANULE_TG1_4KB: u64 = 0b10;
-
-/// 36-bit Intermediate Physical Address — covers 64 GiB, plenty for the
-/// 128 MiB QEMU virt setup and future hardware.
-const IPS_36BIT: u64 = 0b001;
-
-/// Disable TTBR1 walks until the kernel relocates to the upper half.
-const EPD1_DISABLE: u64 = 0b1;
-
-/*
- * Composite value
- */
-
-/// Compile-time TCR_EL1 value installed by [`install`].
-///
-/// Summary:
-///   - 48-bit virtual addresses on both halves (`T0SZ = T1SZ = 16`)
-///   - 4 KiB granule for both halves
-///   - Inner-shareable, write-back cacheable page-table walks
-///   - TTBR1 disabled (upper-half kernel relocation lands later)
-///   - 36-bit Intermediate Physical Address (64 GiB)
-pub const TCR_VALUE: u64 = (T0SZ_48BIT << T0SZ_SHIFT)
-    | (CACHEABILITY_WB_RWALLOC << IRGN0_SHIFT)
-    | (CACHEABILITY_WB_RWALLOC << ORGN0_SHIFT)
-    | (SHAREABILITY_INNER << SH0_SHIFT)
-    | (GRANULE_TG0_4KB << TG0_SHIFT)
-    | (T1SZ_48BIT << T1SZ_SHIFT)
-    | (EPD1_DISABLE << EPD1_SHIFT)
-    | (CACHEABILITY_WB_RWALLOC << IRGN1_SHIFT)
-    | (CACHEABILITY_WB_RWALLOC << ORGN1_SHIFT)
-    | (SHAREABILITY_INNER << SH1_SHIFT)
-    | (GRANULE_TG1_4KB << TG1_SHIFT)
-    | (IPS_36BIT << IPS_SHIFT);
+use crate::types::{Cacheability, Granule, PhysAddrSize, Shareability, VirtAddrSize};
 
 /// Program `TCR_EL1` with [`TCR_VALUE`] and synchronize the pipeline.
 ///
@@ -112,6 +19,138 @@ pub const TCR_VALUE: u64 = (T0SZ_48BIT << T0SZ_SHIFT)
 /// inside the MMU bring-up: MAIR → TCR → TTBR → SCTLR.
 #[inline]
 pub fn install() {
-    write_sysreg!(tcr_el1, TCR_VALUE);
+    let tcr = TcrConfig {
+        ttbr0: TtbrConfig {
+            va_size: VirtAddrSize::from_va_bits(48),
+            granule: Granule::_4KB,
+            inner_cache: Cacheability::WriteBackReadWriteAlloc,
+            outer_cache: Cacheability::WriteBackReadWriteAlloc,
+            shareability: Shareability::InnerShareable,
+            tbi: true,
+        },
+        ttbr1: Some(TtbrConfig {
+            va_size: VirtAddrSize::from_va_bits(48),
+            granule: Granule::_4KB,
+            inner_cache: Cacheability::WriteBackReadWriteAlloc,
+            outer_cache: Cacheability::WriteBackReadWriteAlloc,
+            shareability: Shareability::InnerShareable,
+            tbi: false,
+        }),
+        ips: PhysAddrSize::_48BIT,
+        asid_from_ttbr1: true,
+    };
+
+    write_sysreg!(tcr_el1, tcr.build().raw());
     flush_cpu_pipeline!();
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TtbrConfig {
+    va_size: VirtAddrSize,
+    granule: Granule,
+    inner_cache: Cacheability,
+    outer_cache: Cacheability,
+    shareability: Shareability,
+    tbi: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TcrConfig {
+    ttbr0: TtbrConfig,
+    ttbr1: Option<TtbrConfig>,
+    ips: PhysAddrSize,
+    asid_from_ttbr1: bool,
+}
+
+impl TcrConfig {
+    /// ASID source choice (0=TTBR0, 1=TTBR1)
+    const A1_SHIFT: u8 = 22;
+
+    /// Top-byte ignore for TTBR0
+    const TBI0_SHIFT: u8 = 37;
+
+    /// Top-byte ignore for TTBR1
+    const TBI1_SHIFT: u8 = 38;
+
+    /// `T0SZ` — log2 of the unused VA bits in the low half. `T0SZ = 16`
+    /// reserves bits [63:48] for the high half and leaves 48 usable bits.
+    const T0SZ_SHIFT: u8 = 0;
+
+    /// `IRGN0` — inner cacheability of page-table walks via TTBR0.
+    const IRGN0_SHIFT: u8 = 8;
+
+    /// `ORGN0` — outer cacheability of page-table walks via TTBR0.
+    const ORGN0_SHIFT: u8 = 10;
+
+    /// `SH0` — shareability domain for TTBR0 page-table accesses.
+    const SH0_SHIFT: u8 = 12;
+
+    /// `TG0` — granule (page size) for TTBR0. Encoding differs from `TG1`.
+    const TG0_SHIFT: u8 = 14;
+
+    /// `T1SZ` — same role as `T0SZ`, but for the high half.
+    const T1SZ_SHIFT: u8 = 16;
+
+    /// `EPD1` — when 1, disables TTBR1 table walks entirely.
+    const EPD1_SHIFT: u8 = 23;
+
+    /// `IRGN1` — inner cacheability of TTBR1 walks.
+    const IRGN1_SHIFT: u8 = 24;
+
+    /// `ORGN1` — outer cacheability of TTBR1 walks.
+    const ORGN1_SHIFT: u8 = 26;
+
+    /// `SH1` — shareability for TTBR1 walks.
+    const SH1_SHIFT: u8 = 28;
+
+    /// `TG1` — granule for TTBR1. Encoding differs from `TG0` — read carefully.
+    const TG1_SHIFT: u8 = 30;
+
+    /// `IPS` — Intermediate Physical Address size, common to both halves.
+    const IPS_SHIFT: u8 = 32;
+
+    const fn build(self) -> TcrValue {
+        let ttbr0_bits = (self.ttbr0.va_size.tsz_bits() << Self::T0SZ_SHIFT)
+            | (self.ttbr0.inner_cache.bits() << Self::IRGN0_SHIFT)
+            | (self.ttbr0.outer_cache.bits() << Self::ORGN0_SHIFT)
+            | (self.ttbr0.shareability.bits() << Self::SH0_SHIFT)
+            | (self.ttbr0.granule.to_tg0_bits() << Self::TG0_SHIFT)
+            | ((self.ttbr0.tbi as u64) << Self::TBI0_SHIFT);
+
+        let ttbr1_bits = match self.ttbr1 {
+            Some(t1) => {
+                (t1.va_size.tsz_bits() << Self::T1SZ_SHIFT)
+                    | (t1.inner_cache.bits() << Self::IRGN1_SHIFT)
+                    | (t1.outer_cache.bits() << Self::ORGN1_SHIFT)
+                    | (t1.shareability.bits() << Self::SH1_SHIFT)
+                    | (t1.granule.to_tg1_bits() << Self::TG1_SHIFT)
+                    | ((t1.tbi as u64) << Self::TBI1_SHIFT)
+            }
+            None => {
+                assert!(
+                    !self.asid_from_ttbr1,
+                    "A1=1 requires TTBR1 enabled (ASID source can't be a disabled TTBR)"
+                );
+                1u64 << Self::EPD1_SHIFT
+            }
+        };
+
+        let common_bits = ((self.asid_from_ttbr1 as u64) << Self::A1_SHIFT)
+            | (self.ips.bits() << Self::IPS_SHIFT);
+
+        TcrValue {
+            raw: (ttbr0_bits | ttbr1_bits | common_bits),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct TcrValue {
+    raw: u64,
+}
+
+impl TcrValue {
+    const fn raw(self) -> u64 {
+        self.raw
+    }
 }

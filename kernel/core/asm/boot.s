@@ -55,7 +55,7 @@ _start:
     b.ne    bad_boot_mmu
 
     // establish kernel stack ASAP
-    ldr     x0, =__stack_top
+    ldr     x0, =__stack_top_pa
     mov     sp, x0
 
     // enable FP/SIMD
@@ -65,8 +65,8 @@ _start:
     isb
 
     // clear BSS
-    ldr     x0, =__bss_start
-    ldr     x1, =__bss_end
+    ldr     x0, =__bss_start_pa
+    ldr     x1, =__bss_end_pa
 
 .Lbss_loop:
     cmp     x0, x1
@@ -78,7 +78,6 @@ _start:
 .Lbss_done:
     // restore DTB pointer
     mov     x0, x20
-
     bl      kmain
 
 .Lhalt:
