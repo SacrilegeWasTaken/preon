@@ -13,10 +13,10 @@ use kernel_exceptions::ExceptionVectors;
 global_asm!(include_str!("asm/boot.s"));
 
 #[unsafe(no_mangle)]
-pub extern "C" fn kmain(dtb: usize, kernel_pa_base: usize) -> ! {
+pub extern "C" fn kmain(dtb: usize) -> ! {
     ExceptionVectors::install();
 
-    kernel_mm::layout::init(kernel_pa_base);
+    kernel_mm::layout::init();
 
     kernel_uart_log!("Hello from ExOS!");
 
@@ -27,6 +27,18 @@ pub extern "C" fn kmain(dtb: usize, kernel_pa_base: usize) -> ! {
     //}
 
     let fdt = unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }.expect("DTB error. Check QEMU conf.");
+    kernel_mm::ram::for_each_region(&fdt, |region| {
+        kernel_uart_log!(
+            "RAM region: base=0x{:x} size=0x{:x}",
+            region.base.as_usize(),
+            region.size
+        );
+    });
+    let new_root = kernel_mm::kernel_map::build(&fdt);
+    kernel_uart_log!("kernel_map built, root at 0x{:x}", new_root.as_usize());
+
+    unsafe { kernel_mm::mmu::switch_ttbr1(new_root) };
+    kernel_uart_log!("TTBR1 switched");
 
     let psci = Psci::from_fdt(&fdt).expect("PSCI node missing from DTB");
 

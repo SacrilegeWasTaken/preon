@@ -49,6 +49,7 @@ dependencies = [
 name = "kernel_mm"
 version = "0.1.0"
 dependencies = [
+ "fdt",
  "kernel_arch",
  "kernel_builtin",
 ]

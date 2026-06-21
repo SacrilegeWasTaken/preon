@@ -13,3 +13,4 @@ bench = false
 [dependencies]
 kernel_builtin.workspace = true
 kernel_arch.workspace = true
+fdt.workspace = true

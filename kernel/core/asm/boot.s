@@ -54,8 +54,6 @@ _start:
     tst     x0, #1
     b.ne    bad_boot_mmu
 
-    adrp    x21, _start
-
     // establish kernel stack ASAP
     ldr     x0, =__stack_top_pa
     mov     sp, x0
@@ -171,7 +169,6 @@ _start:
 
     // Trampoline jump — convert DTB to upper-half VA, then br to kmain
     mov     x0, x20
-    mov     x1, x21
     movz    x16, #0xFFFF, lsl #48
     movk    x16, #0x8000, lsl #32
     orr     x0, x0, x16

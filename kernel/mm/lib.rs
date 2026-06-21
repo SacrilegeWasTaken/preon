@@ -2,8 +2,11 @@
 
 pub mod attrs;
 pub mod frame;
+pub mod kernel_map;
 pub mod layout;
+pub mod mmu;
 pub mod page_table;
+pub mod ram;
 pub mod tcr;
 pub mod types;
 

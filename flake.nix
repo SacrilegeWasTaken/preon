@@ -44,7 +44,7 @@
           set -euo pipefail
           ${self.packages.${system}.build}/bin/exos-build
           exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
-            -M virt -cpu cortex-a72 -smp 4 -m 128M \
+            -M virt -cpu cortex-a72 -smp 4 -m 2G \
             -nographic -kernel build/Image "$@"
         '';
 

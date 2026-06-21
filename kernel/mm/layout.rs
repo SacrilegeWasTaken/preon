@@ -7,10 +7,9 @@ use crate::frame::{PhysAddr, VirtAddr};
 pub const KERNEL_VA_BASE: usize = 0xFFFF_8000_0000_0000;
 static KERNEL_VA_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
-pub fn init(kernel_pa_base: usize) {
-    debug_assert!(kernel_pa_base < KERNEL_VA_BASE);
+pub fn init() {
     if KERNEL_VA_OFFSET
-        .compare_exchange(0, KERNEL_VA_BASE - kernel_pa_base, Release, Relaxed)
+        .compare_exchange(0, KERNEL_VA_BASE, Release, Relaxed)
         .is_err()
     {
         panic!("layout::init called twice.")
