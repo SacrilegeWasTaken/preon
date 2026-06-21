@@ -144,58 +144,36 @@ _start:
     orr     x1, x1, #3
     str     x1, [x0, #(256*8)]
 
-    // __kernel_l1[1] = __kernel_l2 | TABLE
+    // __kernel_l1[1] = 1 GiB BLOCK at PA 0x4000_0000 (covers all RAM)
     ldr     x0, =__kernel_l1
-    ldr     x1, =__kernel_l2
-    orr     x1, x1, #3
-    str     x1, [x0, #8]
-
-    // __kernel_l2[0] = 2 MiB block at PA 0x4000_0000
-    ldr     x0, =__kernel_l2
     ldr     x1, =0x0040000040000701
-    str     x1, [x0]
-
-    // __kernel_l2[1] = 2 MiB block at PA 0x4020_0000
-    ldr     x1, =0x0040000040200701
     str     x1, [x0, #8]
 
-    // Write TTBRs 
+    // (NO __kernel_l2 setup — unused now)
 
-    // TTBR0 = trampoline root (TCR_EL1.TG0 = 4 KiB, ASID = 0)
+    // TTBR0 / TTBR1
     ldr     x0, =__idmap_l0
     msr     ttbr0_el1, x0
-
-    // TTBR1 = kernel_map root (TCR_EL1.TG1 = 4 KiB)
     ldr     x0, =__kernel_l0
     msr     ttbr1_el1, x0
 
-    // Barrier sequence + SCTLR.M flip 
-
-    // Make page-table stores globally observable before TLB invalidate
+    // Barrier + SCTLR.M flip
     dsb     ish
-
-    // Invalidate all TLB entries (Inner Shareable)
     tlbi    vmalle1is
-
-    // Wait for TLB invalidate to complete
     dsb     ish
-
-    // Synchronize pipeline before reading SCTLR_EL1
     isb
-
-    // Flip SCTLR_EL1.M (bit 0)
     mrs     x0, sctlr_el1
     orr     x0, x0, #1
     msr     sctlr_el1, x0
-
-    // First fetch after the flip MUST go through MMU; isb forces re-fetch
     isb
 
-    // Trampoline jump to upper-half kmain 
-
-    mov     x0, x20              // restore DTB pointer in x0
-    ldr     x16, =kmain          // x16 = upper-half VMA of kmain
-    br      x16                  // absolute branch — through TTBR1
+    // Trampoline jump — convert DTB to upper-half VA, then br to kmain
+    mov     x0, x20
+    movz    x16, #0xFFFF, lsl #48
+    movk    x16, #0x8000, lsl #32
+    orr     x0, x0, x16
+    ldr     x16, =kmain
+    br      x16
 
 .Lhalt:
     wfe
