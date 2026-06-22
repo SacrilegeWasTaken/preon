@@ -144,6 +144,15 @@ _start:
     orr     x1, x1, #3
     str     x1, [x0, #(256*8)]
 
+    ldr     x0, =__kernel_l0
+    ldr     x1, =__image_l1
+    orr     x1, x1, #3
+    str     x1, [x0, #(511*8)]
+
+    ldr     x0, =__image_l1
+    ldr     x1, =0x0040000040000701
+    str     x1, [x0, #(510*8)]
+
     // __kernel_l1[1] = 1 GiB BLOCK at PA 0x4000_0000 (covers all RAM)
     ldr     x0, =__kernel_l1
     ldr     x1, =0x0040000040000701

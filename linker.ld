@@ -1,7 +1,10 @@
 ENTRY(_start)
 
-KERNEL_VA_BASE = 0xFFFF800000000000;
+KERNEL_LINEAR_BASE = 0xFFFF800000000000;
+KERNEL_IMAGE_BASE = 0xFFFFFFFF80000000;
 PHYS_LOAD_BASE = 0x40080000;
+IMAGE_PA_BASE = 0x40000000;
+IMAGE_TEXT_PA = 0x40100000;
 
 SECTIONS {
     . = PHYS_LOAD_BASE;
@@ -24,27 +27,44 @@ SECTIONS {
         __kernel_l0     = .;    . += 0x1000;
         __kernel_l1     = .;    . += 0x1000;
         __kernel_l2     = .;    . += 0x1000;
+        __image_l1      = .;    . += 0x1000;
         *(.boot.bss .boot.bss.*)
     }
     . = ALIGN(4096);
     __boot_bss_end = .;
 
 
-    . += KERNEL_VA_BASE;
+    . = IMAGE_PA_BASE;
 
 
-    .text : AT(ADDR(.text) - KERNEL_VA_BASE) {
-        KEEP(*(.text.vectors))
-        *(.text*)
+    . = KERNEL_IMAGE_BASE + (IMAGE_TEXT_PA - IMAGE_PA_BASE);
+
+
+    .text : AT(IMAGE_TEXT_PA) {
+        __text_start = .;
+        KEEP(*(.text.vectors));
+        *(.text*);
+        . = ALIGN(4096);
+        __text_end = .;
     }
 
-    .rodata : AT(ADDR(.rodata) - KERNEL_VA_BASE) ALIGN(8) { *(.rodata*) }
-    .data : AT(ADDR(.data) - KERNEL_VA_BASE) ALIGN(8) { *(.data*) }
+    .rodata : ALIGN(4096) { 
+        __rodata_start = .;
+        *(.rodata*);
+        . = ALIGN(4096);
+        __rodata_end = .;
+    }
+    .data : ALIGN(4096) {
+        __data_start = .;
+        *(.data*);
+        . = ALIGN(4096);
+        __data_end = .;
+    }
 
-    .bss (NOLOAD) : AT(ADDR(.bss) - KERNEL_VA_BASE) ALIGN(16) {
+    .bss (NOLOAD) : ALIGN(4096) {
         __bss_start = .;
         *(.bss*) *(COMMON);
-        . = ALIGN(16);
+        . = ALIGN(4096);
         __bss_end = .;
     }
 
@@ -52,9 +72,9 @@ SECTIONS {
     . += 0x40000;
     __stack_top = .;
 
-    __bss_start_pa = __bss_start - KERNEL_VA_BASE;
-    __bss_end_pa = __bss_end - KERNEL_VA_BASE;
-    __stack_top_pa = __stack_top - KERNEL_VA_BASE;
+    __bss_start_pa = __bss_start - KERNEL_IMAGE_BASE + IMAGE_PA_BASE;
+    __bss_end_pa = __bss_end - KERNEL_IMAGE_BASE + IMAGE_PA_BASE;
+    __stack_top_pa = __stack_top - KERNEL_IMAGE_BASE + IMAGE_PA_BASE;
 
     /DISCARD/ : {
         *(.comment)
