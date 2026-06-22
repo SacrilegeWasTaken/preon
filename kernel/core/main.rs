@@ -16,8 +16,6 @@ global_asm!(include_str!("asm/boot.s"));
 pub extern "C" fn kmain(dtb: usize) -> ! {
     ExceptionVectors::install();
 
-    kernel_mm::layout::init();
-
     kernel_uart_log!("Hello from ExOS!");
 
     // Safety: this is the very first call on a cold-booted CPU with

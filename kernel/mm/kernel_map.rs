@@ -7,8 +7,8 @@
 use fdt::Fdt;
 
 use crate::attrs::MemoryAttr;
-use crate::frame::{alloc_page, PhysAddr, VirtAddr};
-use crate::layout::pa_to_kernel_va;
+use crate::frame::{alloc_page, PhysAddr};
+
 use crate::page_table::{Access, Executable, LeafAttrs, Level, PageTable};
 use crate::ram;
 use crate::types::Shareability;
@@ -65,7 +65,7 @@ fn map_region(root: &mut PageTable, base: PhysAddr, size: usize) {
             );
         };
 
-        let va = pa_to_kernel_va(PhysAddr::new(pa));
+        let va = crate::layout::pa_to_linear_va(PhysAddr::new(pa));
         let mut alloc = GlobalFrameAllocator;
         root.map(va, PhysAddr::new(pa), level, KERNEL_RAM, &mut alloc);
         pa += block_size;

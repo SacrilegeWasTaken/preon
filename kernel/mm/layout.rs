@@ -1,27 +1,26 @@
-use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::Ordering::{Acquire, Relaxed, Release};
-
 use crate::frame::{PhysAddr, VirtAddr};
 
-/// Kernel
-pub const KERNEL_VA_BASE: usize = 0xFFFF_8000_0000_0000;
-static KERNEL_VA_OFFSET: AtomicUsize = AtomicUsize::new(0);
+/*
+*
+*   Kernel address-space layout
+*
+*/
 
-pub fn init() {
-    if KERNEL_VA_OFFSET
-        .compare_exchange(0, KERNEL_VA_BASE, Release, Relaxed)
-        .is_err()
-    {
-        panic!("layout::init called twice.")
-    }
+pub const KERNEL_LINEAR_BASE: usize = 0xFFFF_8000_0000_0000;
+pub const KERNEL_IMAGE_BASE: usize = 0xFFFF_8000_0000_0000;
+pub const PHYS_LOAD_BASE: usize = 0x40080000;
+
+#[inline]
+pub const fn pa_to_linear_va(pa: PhysAddr) -> VirtAddr {
+    VirtAddr::new(pa.as_usize() + KERNEL_LINEAR_BASE)
 }
 
-pub fn pa_to_kernel_va(pa: PhysAddr) -> VirtAddr {
-    debug_assert!(pa.as_usize() < KERNEL_VA_BASE);
-    VirtAddr::new(pa.as_usize() + KERNEL_VA_OFFSET.load(Acquire))
+#[inline]
+pub const fn linear_va_to_pa(va: VirtAddr) -> PhysAddr {
+    PhysAddr::new(va.as_usize() - KERNEL_LINEAR_BASE)
 }
 
-pub fn kernel_va_to_pa(va: VirtAddr) -> PhysAddr {
-    debug_assert!(va.as_usize() >= KERNEL_VA_BASE);
-    PhysAddr::new(va.as_usize() - KERNEL_VA_OFFSET.load(Acquire))
+#[inline]
+pub const fn image_va_to_pa(va: VirtAddr) -> PhysAddr {
+    PhysAddr::new(va.as_usize() - KERNEL_IMAGE_BASE + PHYS_LOAD_BASE)
 }
