@@ -5,7 +5,7 @@ use core::arch::global_asm;
 use core::panic::PanicInfo;
 
 use kernel_builtin::{kernel_uart_direct_log, kernel_uart_log, wfe_loop};
-use kernel_cpu::psci::Psci;
+// use kernel_cpu::psci::Psci;
 use kernel_exceptions::ExceptionVectors;
 
 // Boot stub: drop EL2 -> EL1, enable FP/SIMD, set the kernel stack,
@@ -38,12 +38,12 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
     unsafe { kernel_mm::mmu::switch_ttbr1(new_root) };
     kernel_uart_log!("TTBR1 switched");
 
-    let psci = Psci::from_fdt(&fdt).expect("PSCI node missing from DTB");
+    // let psci = Psci::from_fdt(&fdt).expect("PSCI node missing from DTB");
 
     //if let Err(e) = Smp::bring_up_all(&fdt, &psci) {
     //    kernel_uart_log!("SMP bring-up failed: {:?}", e);
     //}
-
+    // unsafe { core::ptr::write_volatile(kmain as *mut u8, 0xAA) }
     kernel_uart_direct_log!("Triggering exception...");
     unsafe { core::arch::asm!("udf #0") }
     kernel_uart_direct_log!("This should never print!");

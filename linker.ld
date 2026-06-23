@@ -34,9 +34,6 @@ SECTIONS {
     __boot_bss_end = .;
 
 
-    . = IMAGE_PA_BASE;
-
-
     . = KERNEL_IMAGE_BASE + (IMAGE_TEXT_PA - IMAGE_PA_BASE);
 
 
@@ -68,9 +65,12 @@ SECTIONS {
         __bss_end = .;
     }
 
-    . = ALIGN(16);
-    . += 0x40000;
-    __stack_top = .;
+    .stack (NOLOAD) : ALIGN(16) {
+        __stack_bottom = .;
+        . += 0x40000;
+        . = ALIGN(16);
+        __stack_top = .;
+    }
 
     __bss_start_pa = __bss_start - KERNEL_IMAGE_BASE + IMAGE_PA_BASE;
     __bss_end_pa = __bss_end - KERNEL_IMAGE_BASE + IMAGE_PA_BASE;
