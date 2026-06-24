@@ -13,11 +13,21 @@ use core::ops::{BitAnd, BitOr};
 use crate::mmio::{ReadOnly, ReadWrite, Reg, WriteOnly};
 use crate::sync::SpinLock;
 
-const UART_BASE: usize = 0x0900_0000;
+/// Virtual base of the UART in the kernel device region. Equals
+/// `pa_to_device_va(UART_PA)` = `KERNEL_DEVICE_BASE + UART_PA`, but is spelled
+/// out as a literal because `kernel_builtin` sits below `kernel_mm` and cannot
+/// call into `layout`. Must stay in sync with `kernel_mm::layout` and the
+/// device branch in `boot.s`; the runtime map keys off the same VA.
+const UART_BASE: usize = 0xFFFF_C000_0900_0000;
+
+/// Physical address of the PL011 register block on QEMU `virt`. The single
+/// source of truth for the UART PA, consumed by `kernel_mm::kernel_map` to
+/// build the device mapping (kept hardcoded until DTB-driven discovery).
+pub const UART_PA: usize = 0x0900_0000;
 
 /*
  *
- * REGISRERS
+ * REGISTERS
  *
  */
 

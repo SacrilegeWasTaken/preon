@@ -1,6 +1,5 @@
 ENTRY(_start)
 
-KERNEL_LINEAR_BASE = 0xFFFF800000000000;
 KERNEL_IMAGE_BASE = 0xFFFFFFFF80000000;
 PHYS_LOAD_BASE = 0x40080000;
 IMAGE_PA_BASE = 0x40000000;
@@ -28,6 +27,9 @@ SECTIONS {
         __kernel_l1     = .;    . += 0x1000;
         __kernel_l2     = .;    . += 0x1000;
         __image_l1      = .;    . += 0x1000;
+        __device_l1     = .;    . += 0x1000;
+        __device_l2     = .;    . += 0x1000;
+        __device_l3     = .;    . += 0x1000;
         *(.boot.bss .boot.bss.*)
     }
     . = ALIGN(4096);

@@ -5,13 +5,14 @@
 //! root is installed in TTBR1 by mmu::switch_ttbr1.
 
 use fdt::Fdt;
-use kernel_arch::VirtAddr;
+use kernel_arch::mm::{Level, PhysAddr, VirtAddr};
+use kernel_builtin::uart::UART_PA;
 
 use crate::attrs::MemoryAttr;
-use crate::frame::{alloc_page, PhysAddr, PAGE_SIZE};
+use crate::frame::{alloc_page, PAGE_SIZE};
 
-use crate::layout::image_va_to_pa;
-use crate::page_table::{Access, Executable, LeafAttrs, Level, PageTable};
+use crate::layout::{image_va_to_pa, pa_to_device_va};
+use crate::page_table::{Access, Executable, LeafAttrs, PageTable};
 use crate::ram;
 use crate::types::{FrameAllocator, Shareability};
 
@@ -59,6 +60,16 @@ const STACK_ATTRS: LeafAttrs = LeafAttrs {
     execute: Executable::None,
 };
 
+/// Leaf attributes for MMIO pages in the device region. Chosen to reproduce
+/// the trampoline UART descriptor exactly: Device-nGnRE, EL1 RW, non-shareable
+/// (device memory ignores shareability), execute-never.
+const DEVICE_ATTRS: LeafAttrs = LeafAttrs {
+    memory: MemoryAttr::DeviceNGNRE,
+    access: Access::KernelReadWrite,
+    share: Shareability::NonShareable,
+    execute: Executable::None,
+};
+
 const BLOCK_1GB: usize = 1 << 30;
 const BLOCK_2MB: usize = 2 << 20;
 
@@ -86,6 +97,7 @@ pub fn build(fdt: &Fdt) -> PhysAddr {
 
     build_linear(root, fdt, &mut alloc);
     build_image(root, &mut alloc);
+    build_device(root, &mut alloc);
 
     root_pa
 }
@@ -104,6 +116,22 @@ pub fn build_linear(root: &mut PageTable, fdt: &Fdt, alloc: &mut impl FrameAlloc
     ram::for_each_region(fdt, |r| {
         map_region(root, r.base, r.size, LINEAR_RAM, alloc);
     })
+}
+
+/// Map the device region into the runtime kernel root. The trampoline maps
+/// the UART so early prints work; this re-establishes the same page at the
+/// same VA in the permanent map, so the console survives `switch_ttbr1` and
+/// the later TTBR0 teardown. One 4 KiB L3 page today; extend here as GIC /
+/// timer MMIO is added.
+pub fn build_device(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
+    let device_va = pa_to_device_va(PhysAddr::new(UART_PA));
+    root.map(
+        device_va,
+        PhysAddr::new(UART_PA),
+        Level::L3,
+        DEVICE_ATTRS,
+        alloc,
+    );
 }
 
 fn map_section(

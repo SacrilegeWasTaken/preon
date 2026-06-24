@@ -52,10 +52,13 @@ impl<T, M> Reg<T, M> {
     /// Construct a register handle at a fixed MMIO address.
     ///
     /// # Safety
-    /// `addr` must be the physical address of a hardware register that
-    /// holds a `T` and supports the access mode `M`. The kernel assumes
-    /// any access goes through the volatile pair, never through plain
-    /// dereference of the underlying pointer.
+    /// `addr` must be the address at which the hardware register is
+    /// reachable in the *active translation regime* — a physical address
+    /// while the MMU is off, or the mapped device VA once it is on (e.g.
+    /// the UART's `KERNEL_DEVICE_BASE` mapping). It must hold a `T` and
+    /// support the access mode `M`. The kernel assumes any access goes
+    /// through the volatile pair, never through plain dereference of the
+    /// underlying pointer.
     pub const unsafe fn new(addr: usize) -> Self {
         Self {
             addr: addr as *mut T,
