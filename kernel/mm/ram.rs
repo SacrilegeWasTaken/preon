@@ -1,6 +1,5 @@
 use fdt::Fdt;
-
-use crate::frame::PhysAddr;
+use kernel_arch::mm::PhysAddr;
 
 pub struct RamRegion {
     pub base: PhysAddr,

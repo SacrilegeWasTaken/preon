@@ -1,6 +1,6 @@
 //! General types for MMU control
 
-use kernel_arch::PhysAddr;
+use kernel_arch::mm::PhysAddr;
 
 /// Cache-coherence domain of the mapped region.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

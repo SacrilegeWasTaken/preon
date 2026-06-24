@@ -1,7 +1,5 @@
 use core::cell::UnsafeCell;
 
-pub use kernel_arch::{PhysAddr, VirtAddr};
-
 /// Page size in bytes. 4 KiB granule — must match the granule programmed
 /// in `tcr::TCR_VALUE`.  
 pub const PAGE_SIZE: usize = 4096;
@@ -23,6 +21,8 @@ unsafe impl Sync for PagePool {}
 static POOL: PagePool = PagePool(UnsafeCell::new([0; POOL_SIZE]));
 
 use core::sync::atomic::{AtomicUsize, Ordering};
+
+use kernel_arch::mm::{PhysAddr, VirtAddr};
 
 use crate::layout::image_va_to_pa;
 

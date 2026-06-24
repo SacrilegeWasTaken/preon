@@ -1,8 +1,9 @@
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use kernel_arch::PhysAddr;
-use kernel_builtin::{kernel_uart_log, wfe_loop};
+use kernel_arch::mm::PhysAddr;
+use kernel_arch::wfe_loop;
+use kernel_builtin::kernel_uart_log;
 
 use crate::psci::{Psci, PsciError};
 use crate::types::{CpuId, Mpidr};

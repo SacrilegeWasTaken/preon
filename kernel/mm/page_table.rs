@@ -18,8 +18,9 @@
 //! Reference: ARM Architecture Reference Manual, D5.3 (translation
 //! table descriptor formats).
 
+use kernel_arch::mm::{Level, PhysAddr, VirtAddr};
+
 use crate::attrs::MemoryAttr;
-use crate::frame::{PhysAddr, VirtAddr};
 use crate::types::{FrameAllocator, Shareability};
 
 /*
@@ -91,56 +92,6 @@ pub const PXN: u64 = 1 << 53;
 pub const UXN: u64 = 1 << 54;
 
 // Typed parameters
-
-/// Where a translation table sits in the 4-level hierarchy.
-///
-/// Each level consumes 9 bits of the virtual address (`index_shift`
-/// returns the bit position) and either points at the next level via a
-/// table entry or terminates the walk with a block (L1, L2) or page (L3).
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Level {
-    L0,
-    L1,
-    L2,
-    L3,
-}
-
-impl Level {
-    /// Bit position of this level's 9-bit index inside a virtual address.
-    pub const fn index_shift(self) -> u64 {
-        match self {
-            Level::L0 => 39,
-            Level::L1 => 30,
-            Level::L2 => 21,
-            Level::L3 => 12,
-        }
-    }
-
-    /// Whether block entries are encodable at this level. L1 = 1 GiB
-    /// blocks, L2 = 2 MiB blocks; L0 and L3 don't support blocks.
-    pub const fn supports_block(self) -> bool {
-        matches!(self, Level::L1 | Level::L2)
-    }
-
-    /// Extract this level's 9-bit index from a virtual address.
-    ///
-    /// Each level consumes a contiguous 9-bit slice of the VA — L0 takes
-    /// the top, L3 the bottom. The result is in `0..512` and is meant
-    /// for indexing a [`PageTable::entries`].
-    pub const fn index_in(self, va: VirtAddr) -> usize {
-        ((va.as_u64() >> self.index_shift()) & 0x1FF) as usize
-    }
-
-    /// Next deeper level. Panics on L3 — there is no level below.
-    pub const fn next_level(self) -> Level {
-        match self {
-            Level::L0 => Level::L1,
-            Level::L1 => Level::L2,
-            Level::L2 => Level::L3,
-            Level::L3 => panic!("Level::L3 has no next level"),
-        }
-    }
-}
 
 /// Access permissions for a leaf entry (block or page). Names describe
 /// the policy ("who can do what") rather than encoding raw AP bits.

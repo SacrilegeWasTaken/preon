@@ -1,5 +1,5 @@
 use fdt::Fdt;
-use kernel_arch::PhysAddr;
+use kernel_arch::mm::PhysAddr;
 
 use crate::types::Mpidr;
 
@@ -71,12 +71,7 @@ impl Psci {
 
     /// Wake the CPU identified by `mpidr`. `entry` is the physical entry
     /// point on the secondary, `ctx` becomes its `x0` on first run.
-    pub fn cpu_on(
-        &self,
-        mpidr: Mpidr,
-        entry: PhysAddr,
-        ctx: PhysAddr,
-    ) -> Result<(), PsciError> {
+    pub fn cpu_on(&self, mpidr: Mpidr, entry: PhysAddr, ctx: PhysAddr) -> Result<(), PsciError> {
         let code = self.raw_call(self.cpu_on_id, mpidr.raw(), entry.as_u64(), ctx.as_u64());
         if code == 0 {
             Ok(())
