@@ -6,7 +6,7 @@ on top of these three commitments.
 
 This document describes what preon is trying to be, why, and what it
 explicitly is not. For the boot contract see
-[`boot_policy.md`](boot_policy.md); for the implementation roadmap see
+[`BOOT_CONTRACT.md`](BOOT_CONTRACT.md); for the implementation roadmap see
 [`../README.md`](../README.md).
 
 ---
@@ -48,28 +48,16 @@ can be defended on first principles.
 
 Preon aims to run real software, not to illustrate concepts:
 
-- ELF binaries from a standard `aarch64-unknown-none` or
-  `aarch64-unknown-linux-gnu` toolchain
+- ELF binaries from a standard `aarch64-unknown-none` toolchain
 - Disk-backed file systems via userspace `virtio-blk` server
 - Network via userspace `virtio-net` server + TCP/IP stack
-- Eventually: a Linux ABI personality for running unmodified Linux
-  userspace under preon
 
-### Two ABIs, one kernel
+### One ABI: native capabilities
 
-Preon exposes two ABI personalities:
-
-1. **Native (capability-based).** Thin shim over seL4-style syscalls.
-   Programs that opt into capability programming use this. The kernel's
-   own syscall table is small and lives at this layer.
-2. **Linux compat.** POSIX-like surface (`open`/`read`/`fork`/…)
-   translated by a userspace runtime into native IPC + capability
-   operations. Lets us run unmodified Linux userspace binaries without
-   any of POSIX semantics leaking into the kernel.
-
-The kernel itself doesn't know about POSIX. The Linux personality is a
-userspace library that translates Linux syscalls into preon
-operations.
+Preon exposes a single ABI — a thin shim over seL4-style syscalls.
+Programs target the kernel's small, capability-based syscall table
+through a userspace runtime that wraps the raw calls. The kernel itself
+knows nothing about POSIX or any foreign convention.
 
 ---
 
@@ -123,27 +111,20 @@ needs (MemoryRegion for MMIO, Notification for the device's IRQ,
 Endpoint for client requests). The kernel doesn't know what a "file"
 or a "socket" is.
 
-### Layer 4 — ABI personalities
+### Layer 4 — Native ABI runtime
 
-The user-facing system-call surface lives here, as userspace
-libraries:
-
-- **Native runtime** — direct wrappers around kernel syscalls. Used
-  by programs written for preon directly.
-- **Linux runtime** — POSIX translation layer. Intercepts
-  `open`/`read`/`fork`/… and rewrites them as native IPC + capability
-  operations against the appropriate userspace servers.
-
-Adding a new personality (BSD, Plan 9, …) means writing a new
-userspace library, not touching the kernel.
+The user-facing system-call surface lives here as a userspace library:
+direct wrappers around the kernel's capability syscalls, used by
+programs written for preon. Keeping the surface in userspace lets it
+evolve without touching the kernel.
 
 ---
 
 ## What preon is NOT
 
 - **Not a Unix.** No POSIX in the kernel. No global FS namespace. No
-  ambient `uid`. Linux compatibility comes from userspace
-  translation, not kernel concession.
+  ambient `uid`. Foreign conventions, if ever wanted, stay entirely in
+  userspace and never leak into the kernel.
 - **Not formally verified** (yet). The architecture is verifiable in
   principle, but proof work is its own multi-year project. We aim for
   a small enough TCB that proof becomes plausible later — not for
@@ -186,10 +167,9 @@ questions we ask:
 - **FreeBSD** — code style, naming conventions, internal structure.
   When in doubt about how to organize something inside the kernel, we
   look at FreeBSD (especially `sys/vm/` and the scheduler).
-- **Linux** — boot protocol, syscall ABI surface, the realities of
-  what userspace expects to see. We don't follow Linux's kernel
-  design, but we follow what Linux userspace assumes about its
-  environment.
+- **Linux** — boot protocol and the realities of arm64 bring-up. We
+  reference its kernel implementation where it helps; we don't follow
+  its kernel design.
 
 ---
 

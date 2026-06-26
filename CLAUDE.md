@@ -3,11 +3,23 @@
 ## Project Overview
 
 Exos is a microkernel designed to match the functionality of production kernels
-as closely as possible. It supports two configurations:
-- **Standalone** — runs as an independent system with only native ABI apps.
-- **LINUX ABI compat** - read docs/IDEA.md to understand whole system.
+as closely as possible. It runs as an independent system with native,
+capability-based ABI apps.
 
-This repository contains the standalone implementation of Exos.
+---
+
+## Project documentation
+
+The design intent and contracts live in these documents — consult them
+before non-trivial work, since they hold reasoning the code alone doesn't
+capture. Keep them in sync when behavior changes.
+
+- [`README.md`](README.md) — phase-by-phase roadmap, plus build & run.
+- [`docs/IDEA.md`](docs/IDEA.md) — design intent: what preon is and is not,
+  the capability model, the architecture layers, guiding principles.
+- [`docs/BOOT_CONTRACT.md`](docs/BOOT_CONTRACT.md) — the bootloader → kernel
+  contract: entry state, register/FDT requirements, memory-map assumptions.
+- [`docs/IPC.md`](docs/IPC.md) — IPC and capability design notes.
 
 ---
 

@@ -45,7 +45,7 @@ virtual-address regions:
 | Image | `0xFFFF_FFFF_8000_0000` | Kernel `.text`/`.rodata`/`.data`/`.bss`/stack | Per-section RO+X / RO+NX / RW+NX |
 | Device | `0xFFFF_C000_0000_0000` (planned) | MMIO (UART, GIC, timer) | Device-nGnRE, RW + NX |
 
-See [`docs/boot_policy.md`](docs/boot_policy.md) for the full bring-up
+See [`docs/BOOT_CONTRACT.md`](docs/BOOT_CONTRACT.md) for the full bring-up
 sequence and the invariants each stage establishes.
 
 ## Build & run
@@ -125,7 +125,7 @@ is built toward.
 The kernel now lives in the upper half with separate VA regions for
 the linear map and the kernel image. Image is mapped page-by-page with
 per-section permissions; linear stays as a coarse 1 GiB-block map of
-RAM. See [`docs/boot_policy.md`](docs/boot_policy.md) for the bring-up
+RAM. See [`docs/BOOT_CONTRACT.md`](docs/BOOT_CONTRACT.md) for the bring-up
 ordering.
 
 - [x] `MAIR_EL1`, `TCR_EL1`, `TTBR0_EL1`/`TTBR1_EL1` initial configuration in asm
@@ -223,7 +223,7 @@ secondary entry point.
 
 ## Further reading
 
-- [`docs/boot_policy.md`](docs/boot_policy.md) — boot protocol: entry
+- [`docs/BOOT_CONTRACT.md`](docs/BOOT_CONTRACT.md) — boot protocol: entry
   conditions, pre-MMU sequence, trampoline tables, MMU enable, runtime
   setup, TTBR0 teardown, invariants per stage
 - [`docs/IDEA.md`](docs/IDEA.md) — layered architecture preon is built toward
