@@ -120,7 +120,7 @@ is built toward.
 - [x] Full `TrapFrame` dump on every handler (registers, ELR, SPSR, FAR, decoded ESR)
 - [x] `panic_handler` writes through `RawUart` and dumps register state
 
-### Phase 2 — Virtual memory (current)
+### Phase 2 — Virtual memory
 
 The kernel now lives in the upper half with separate VA regions for
 the linear map and the kernel image. Image is mapped page-by-page with
@@ -143,12 +143,14 @@ ordering.
       `.text` RO+X, `.rodata` RO+NX, `.data` RW+NX, `.bss` RW+NX, `.stack` RW+NX
 - [x] Linker symbols for every section boundary (`__text_start`/`__text_end`/…)
 - [x] Permission enforcement verified end-to-end (write to `.text` → DFSC=0xF, L3 perm fault)
-- [ ] Device region for MMIO (UART, future GIC/timer) with Device-nGnRE attrs
-- [ ] UART driver migration from TTBR0 identity to TTBR1 device VA
-- [ ] TTBR0 teardown (`msr ttbr0_el1, xzr`, `TCR_EL1.EPD0=1`)
-- [ ] Page-fault handler hook in `el1_sync` / `el0_sync` (today: panic dump)
+- [x] Device region for MMIO (UART, future GIC/timer) with Device-nGnRE attrs
+- [x] UART driver migration from TTBR0 identity to TTBR1 device VA
+- [x] TTBR0 teardown (`msr ttbr0_el1, xzr`, `TCR_EL1.EPD0=1`)
+- [x] Page-fault handler hook in `el1_sync`: typed abort decode (`ESR`/`FAR`,
+      fault status + level + access kind), reports and parks. `el0_sync`
+      stays a generic dump until userspace (Phase 7) can fault
 
-### Phase 3 — Production allocator
+### Phase 3 — Production allocator (current)
 
 The bootstrap bump pool is a placeholder. Real allocator unlocks SMP
 (per-CPU stacks), userspace (page allocation), and frees the trampoline
