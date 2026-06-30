@@ -26,27 +26,47 @@
           extensions = [ "rust-src" "llvm-tools-preview" "rust-analyzer" ];
         };
 
-        # cargo build --release + llvm-objcopy into build/Image.
-        buildImage = pkgs.writeShellScriptBin "exos-build" ''
-          set -euo pipefail
-          export PATH="${rustToolchain}/bin:${pkgs.llvmPackages_latest.llvm}/bin:$PATH"
-          cargo build --release
-          mkdir -p build
-          llvm-objcopy -O binary \
-            target/aarch64-unknown-none/release/kernel \
-            build/Image
-          echo "image: build/Image"
-        '';
+        # cargo build (for the given profile) + llvm-objcopy into build/Image.
+        # `cargoFlag` selects the profile; `subdir` is the matching target
+        # output directory.
+        mkBuild = { name, cargoFlag, subdir }:
+          pkgs.writeShellScriptBin name ''
+            set -euo pipefail
+            export PATH="${rustToolchain}/bin:${pkgs.llvmPackages_latest.llvm}/bin:$PATH"
+            cargo build ${cargoFlag}
+            mkdir -p build
+            llvm-objcopy -O binary \
+              target/aarch64-unknown-none/${subdir}/kernel \
+              build/Image
+            echo "image: build/Image (${subdir})"
+          '';
 
-        # qemu-system-aarch64 with our standard flags. Extra arguments
-        # are forwarded to QEMU.
-        runQemu = pkgs.writeShellScriptBin "exos-run" ''
-          set -euo pipefail
-          ${self.packages.${system}.build}/bin/exos-build
-          exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
-            -M virt -cpu cortex-a72 -smp 4 -m 2G \
-            -nographic -kernel build/Image "$@"
-        '';
+        # Dev image carries debug-assertions + overflow-checks (see the
+        # release-dev profile in Cargo.toml); release is the clean image.
+        buildDev = mkBuild {
+          name = "exos-build";
+          cargoFlag = "--profile release-dev";
+          subdir = "release-dev";
+        };
+        buildRelease = mkBuild {
+          name = "exos-build-release";
+          cargoFlag = "--release";
+          subdir = "release";
+        };
+
+        # qemu-system-aarch64 with our standard flags. Builds the chosen
+        # image first; extra arguments are forwarded to QEMU.
+        mkRun = { name, build }:
+          pkgs.writeShellScriptBin name ''
+            set -euo pipefail
+            ${pkgs.lib.getExe build}
+            exec ${pkgs.qemu}/bin/qemu-system-aarch64 \
+              -M virt -cpu cortex-a72 -smp 4 -m 2G \
+              -nographic -kernel build/Image "$@"
+          '';
+
+        runDev = mkRun { name = "exos-run"; build = buildDev; };
+        runRelease = mkRun { name = "exos-run-release"; build = buildRelease; };
 
         # `cargo clean` plus removing the raw image.
         cleanAll = pkgs.writeShellScriptBin "exos-clean" ''
@@ -74,22 +94,32 @@
           '';
         };
 
-        packages.build = buildImage;
-        packages.run = runQemu;
+        packages.build = buildDev;
+        packages.build-release = buildRelease;
+        packages.run = runDev;
+        packages.run-release = runRelease;
         packages.clean = cleanAll;
-        packages.default = runQemu;
+        packages.default = runDev;
 
         apps.build = {
           type = "app";
-          program = "${buildImage}/bin/exos-build";
+          program = pkgs.lib.getExe buildDev;
+        };
+        apps.build-release = {
+          type = "app";
+          program = pkgs.lib.getExe buildRelease;
         };
         apps.run = {
           type = "app";
-          program = "${runQemu}/bin/exos-run";
+          program = pkgs.lib.getExe runDev;
+        };
+        apps.run-release = {
+          type = "app";
+          program = pkgs.lib.getExe runRelease;
         };
         apps.clean = {
           type = "app";
-          program = "${cleanAll}/bin/exos-clean";
+          program = pkgs.lib.getExe cleanAll;
         };
         apps.default = self.apps.${system}.run;
       });

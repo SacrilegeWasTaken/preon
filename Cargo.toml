@@ -28,3 +28,11 @@ kernel_mm = { path = "kernel/mm" }
 driver_uart = { path = "drivers/uart" }
 
 fdt = "0.1.5"
+
+# Dev image: release codegen with run-time checks turned on. Keeps the
+# optimized layout (avoids opt-level-0 surprises in a no_std kernel) while
+# enabling debug_assert! and arithmetic overflow checks for bring-up.
+[profile.release-dev]
+inherits = "release"
+debug-assertions = true
+overflow-checks = true
