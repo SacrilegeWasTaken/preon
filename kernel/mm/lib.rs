@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod attrs;
+pub mod buddy;
 pub mod frame;
 pub mod kernel_map;
 pub mod layout;
