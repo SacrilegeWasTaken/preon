@@ -12,3 +12,8 @@ bench = false
 
 [dependencies]
 
+# `cfg(kani)` is set only by the Kani verifier; declare it so a normal
+# `cargo build` doesn't warn about the `#[cfg(kani)]` harness modules.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
