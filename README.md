@@ -156,7 +156,9 @@ The bootstrap bump pool is a placeholder. Real allocator unlocks SMP
 (per-CPU stacks), userspace (page allocation), and frees the trampoline
 page tables back to the system.
 
-- [ ] Buddy allocator (Linux-style orders, free-lists by order)
+- [x] Buddy allocator (Linux-style orders, free-lists by order) — core
+      formally verified with Kani (`alloc` split, `free` coalesce, `free_range`
+      carve, mass conservation; see [`docs/VERIFICATION.md`](docs/VERIFICATION.md))
 - [ ] Initialize from DTB memory map minus kernel image + reserved regions
 - [ ] Replace `kernel_mm::frame::alloc_page` to back onto buddy
 - [ ] Reclaim `.boot.bss` trampoline page tables (~36 KiB) after `disable_ttbr0`
@@ -230,3 +232,5 @@ secondary entry point.
   setup, TTBR0 teardown, invariants per stage
 - [`docs/IDEA.md`](docs/IDEA.md) — layered architecture preon is built toward
 - [`docs/IPC.md`](docs/IPC.md) — IPC design notes (placeholder)
+- [`docs/VERIFICATION.md`](docs/VERIFICATION.md) — Kani model-checking: scope,
+  what's provable vs out of reach, how to run, harness inventory
