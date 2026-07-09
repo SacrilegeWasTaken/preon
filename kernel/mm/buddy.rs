@@ -134,6 +134,8 @@ enum PageState {
 
 const MAX_ORDER: usize = 11;
 
+// static BUDDY: SpinLock<BuddyAllocator> = todo!();
+
 struct BuddyAllocator {
     pages: &'static mut [PageInfo],
     dram_base: PhysAddr,
@@ -143,6 +145,33 @@ struct BuddyAllocator {
 }
 
 impl BuddyAllocator {
+    fn new(pages: &'static mut [PageInfo], dram_base: PhysAddr, nr_frames: usize) -> Self {
+        debug_assert!(nr_frames <= pages.len());
+        for p in pages.iter_mut() {
+            p.mark_reserved();
+        }
+        Self {
+            pages,
+            dram_base,
+            nr_frames,
+            free_area: [None; MAX_ORDER],
+            free_frames: 0,
+        }
+    }
+
+    fn alloc_pages(&mut self, order: u8) -> Option<PhysAddr> {
+        self.alloc(order).map(|pfn| self.pa_of(pfn))
+    }
+
+    fn alloc_page(&mut self) -> Option<PhysAddr> {
+        self.alloc_pages(0)
+    }
+
+    fn free_pages(&mut self, pa: PhysAddr, order: u8) {
+        let pfn = self.pfn_of(pa);
+        self.free(pfn, order);
+    }
+
     fn pfn_of(&self, pa: PhysAddr) -> Pfn {
         debug_assert!(
             self.dram_base.as_usize() <= pa.as_usize()
@@ -735,5 +764,69 @@ mod verification {
         a.free_range(Pfn::new_unchecked(start), count);
 
         assert!(a.free_frames == count);
+    }
+
+    /*
+     *
+     *  public API (PhysAddr) + constructor
+     *
+     */
+
+    /// A freshly-built allocator owns every frame as Reserved, holds no free
+    /// blocks, and reports OOM until `free_range` populates it.
+    #[kani::proof]
+    #[kani::unwind(12)]
+    fn new_starts_reserved() {
+        static mut B: [PageInfo; 4] = [const {
+            PageInfo {
+                next: RAW_NONE,
+                prev: RAW_NONE,
+                count: AtomicU32::new(0),
+                order: 0,
+                state: PageState::Free,
+                flags: 0,
+            }
+        }; 4];
+        let pages: &'static mut [PageInfo] = unsafe { &mut *(&raw mut B) };
+
+        let mut a = BuddyAllocator::new(pages, PhysAddr::new(0x4000_0000), 4);
+
+        let mut i = 0u32;
+        while i < 4 {
+            assert!(a.page(Pfn::new_unchecked(i)).state() == PageState::Reserved);
+            i += 1;
+        }
+        assert!(a.free_frames == 0);
+        assert!(a.alloc(0) == None);
+    }
+
+    /// The PhysAddr wrappers preserve the verified core: `alloc_pages` returns
+    /// the block's page-aligned physical base, and `free_pages` of that address
+    /// restores the original block through the `dram_base` offset.
+    #[kani::proof]
+    #[kani::unwind(12)]
+    fn alloc_free_pages_round_trip() {
+        let mut a = fresh4!();
+        a.dram_base = PhysAddr::new(0x4000_0000);
+
+        let f0 = Pfn::new_unchecked(0);
+        a.page_mut(Pfn::new_unchecked(1)).mark_tail();
+        a.page_mut(Pfn::new_unchecked(2)).mark_tail();
+        a.page_mut(Pfn::new_unchecked(3)).mark_tail();
+        a.page_mut(f0).mark_free(2);
+        a.push_front(2, f0);
+        a.free_frames = 4;
+
+        let o: u8 = kani::any();
+        kani::assume((o as usize) <= 2);
+
+        let pa = a.alloc_pages(o).unwrap();
+        assert!(pa == PhysAddr::new(0x4000_0000)); // block base via dram_base
+        assert!(pa.as_usize() % 4096 == 0);
+
+        a.free_pages(pa, o);
+
+        assert!(a.free_area[2] == Some(f0));
+        assert!(a.free_frames == 4);
     }
 }
