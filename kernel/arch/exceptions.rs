@@ -144,3 +144,49 @@ impl ExceptionClass {
         }
     }
 }
+
+/*
+ *
+ *  Formal verification (Kani model-checking harnesses)
+ *
+ *  Compiled only under `cargo kani`. Both decoders must be total over their
+ *  raw input — a fault code the kernel can't classify would be a live bug.
+ *
+ */
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+    use crate::reg::Dfsc;
+
+    /// `from_dfsc` classifies every 6-bit fault code without panicking, and
+    /// the levelled classes (raw ≤ 0x0F) are exactly the ones carrying a level.
+    #[kani::proof]
+    fn fault_status_total() {
+        let raw: u8 = kani::any();
+        let fs = FaultStatus::from_dfsc(Dfsc::new(raw));
+
+        match fs {
+            FaultStatus::AddressSize { .. }
+            | FaultStatus::Translation { .. }
+            | FaultStatus::AccessFlag { .. }
+            | FaultStatus::Permission { .. } => {
+                assert!(raw <= 0x0F);
+                assert!(fs.level().is_some());
+            }
+            FaultStatus::Alignment | FaultStatus::Other(_) => {
+                assert!(fs.level().is_none());
+            }
+        }
+        assert!(!fs.description().is_empty());
+    }
+
+    /// `ExceptionClass::from_ec` is total over every `EC` value and always
+    /// yields a non-empty description.
+    #[kani::proof]
+    fn exception_class_total() {
+        let ec: u8 = kani::any();
+        let class = ExceptionClass::from_ec(ec);
+        assert!(!class.description().is_empty());
+    }
+}

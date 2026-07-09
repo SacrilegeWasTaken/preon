@@ -321,3 +321,77 @@ impl PageTable {
         *current.entry_at_mut(va, target) = leaf;
     }
 }
+
+/*
+*
+* Formal verification (Kani model-checking harnesses)
+*
+* Compiled only under `cargo kani`. Descriptor encoding is pure bit math, so
+* CBMC covers every input: round-trip of the output address and the type-bit
+* predicates the walker branches on.
+*
+*/
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    const ATTRS: LeafAttrs = LeafAttrs {
+        memory: MemoryAttr::Normal,
+        access: Access::KernelReadWrite,
+        share: Shareability::InnerShareable,
+        execute: Executable::None,
+    };
+
+    /// A page-aligned PA inside the 48-bit output-address space.
+    fn any_page_aligned_pa() -> PhysAddr {
+        let raw: usize = kani::any();
+        kani::assume(raw % 4096 == 0);
+        kani::assume(raw < (1usize << 48));
+        PhysAddr::new(raw)
+    }
+
+    /// A page (L3) descriptor round-trips its output address and reads back as
+    /// a valid table-or-page — never a block.
+    #[kani::proof]
+    fn page_encoding_round_trip() {
+        let pa = any_page_aligned_pa();
+        let e = Entry::page(pa, ATTRS);
+        assert!(e.output_addr().as_usize() == pa.as_usize());
+        assert!(e.is_valid());
+        assert!(e.is_table_or_page());
+        assert!(!e.is_block());
+    }
+
+    /// A table descriptor round-trips the next-level address and is valid.
+    #[kani::proof]
+    fn table_encoding_round_trip() {
+        let pa = any_page_aligned_pa();
+        let e = Entry::table(pa);
+        assert!(e.output_addr().as_usize() == pa.as_usize());
+        assert!(e.is_valid());
+        assert!(e.is_table_or_page());
+    }
+
+    /// A block descriptor (L1/L2 only) round-trips its address and reads back
+    /// as a block — never a table-or-page.
+    #[kani::proof]
+    fn block_encoding_round_trip() {
+        let pa = any_page_aligned_pa();
+        let level = if kani::any() { Level::L1 } else { Level::L2 };
+        let e = Entry::block(pa, level, ATTRS);
+        assert!(e.output_addr().as_usize() == pa.as_usize());
+        assert!(e.is_valid());
+        assert!(e.is_block());
+        assert!(!e.is_table_or_page());
+    }
+
+    /// An invalid entry is exactly that — no valid bit, no address.
+    #[kani::proof]
+    fn invalid_entry_is_inert() {
+        let e = Entry::invalid();
+        assert!(!e.is_valid());
+        assert!(!e.is_block());
+        assert!(e.output_addr().as_usize() == 0);
+    }
+}

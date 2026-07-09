@@ -123,3 +123,70 @@ impl Level {
         }
     }
 }
+
+/*
+ *
+ *  Formal verification (Kani model-checking harnesses)
+ *
+ *  Compiled only under `cargo kani` (the `kani` cfg); a normal kernel build
+ *  never sees this module. Every harness proves pure address/index
+ *  arithmetic — no asm, no MMIO — so CBMC can reason about all paths.
+ *
+ */
+
+#[cfg(kani)]
+mod verification {
+    use super::{Level, VirtAddr};
+
+    /// The four levels' 9-bit indices tile VA bits [47:12] exactly — no gap,
+    /// no overlap. Catches any off-by-one in `index_shift`.
+    #[kani::proof]
+    fn level_indices_tile_va() {
+        let raw: u64 = kani::any();
+        let va = VirtAddr::new(raw as usize);
+
+        let l0 = Level::L0.index_in(va) as u64;
+        let l1 = Level::L1.index_in(va) as u64;
+        let l2 = Level::L2.index_in(va) as u64;
+        let l3 = Level::L3.index_in(va) as u64;
+
+        // Each slice is 9 bits wide.
+        assert!(l0 < 512 && l1 < 512 && l2 < 512 && l3 < 512);
+
+        // Reassembled, the four slices equal bits [47:12] of the VA.
+        let reassembled = (l0 << 27) | (l1 << 18) | (l2 << 9) | l3;
+        let expected = (raw >> 12) & 0xF_FFFF_FFFF; // low 36 bits
+        assert!(reassembled == expected);
+    }
+
+    /// `from_index` is total over every `u8`: never panics, and decodes the
+    /// low two bits to the matching level.
+    #[kani::proof]
+    fn from_index_is_total() {
+        let n: u8 = kani::any();
+        let level = Level::from_index(n);
+        let expected = match n & 0b11 {
+            0 => Level::L0,
+            1 => Level::L1,
+            2 => Level::L2,
+            _ => Level::L3,
+        };
+        assert!(level == expected);
+    }
+
+    /// `next_level` walks L0 → L1 → L2 → L3 without panicking.
+    #[kani::proof]
+    fn next_level_progresses() {
+        assert!(Level::L0.next_level() == Level::L1);
+        assert!(Level::L1.next_level() == Level::L2);
+        assert!(Level::L2.next_level() == Level::L3);
+    }
+
+    /// L3 has no level below it: `next_level` must panic rather than hand back
+    /// a bogus level.
+    #[kani::proof]
+    #[kani::should_panic]
+    fn next_level_l3_panics() {
+        let _ = Level::L3.next_level();
+    }
+}

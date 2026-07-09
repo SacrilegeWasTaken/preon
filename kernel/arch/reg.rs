@@ -160,3 +160,33 @@ impl Dfsc {
         self.0
     }
 }
+
+/*
+ *
+ *  Formal verification (Kani model-checking harnesses)
+ *
+ *  Compiled only under `cargo kani`. The register decoders are pure bit
+ *  extraction over an arbitrary raw word — CBMC covers the whole 64-bit space.
+ *
+ */
+
+#[cfg(kani)]
+mod verification {
+    use super::*;
+
+    /// The `EC` / `IL` / `ISS` accessors tile the low 32 bits of `ESR_EL1`
+    /// exactly — no gap, no overlap. Guards the shift/mask constants.
+    #[kani::proof]
+    fn esr_fields_tile_low_word() {
+        let raw: u64 = kani::any();
+        let esr = Esr::from_raw(raw);
+
+        let ec = esr.ec_raw() as u64;
+        let il = esr.il() as u64;
+        let iss = esr.iss() as u64;
+
+        assert!(ec < 64 && iss < (1 << 25));
+        let reassembled = (ec << 26) | (il << 25) | iss;
+        assert!(reassembled == (raw & 0xFFFF_FFFF));
+    }
+}
