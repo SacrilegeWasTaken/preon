@@ -41,6 +41,8 @@ The goal is to educate the developer, not to do the work for them.
   must not be modified.
 - If vulnerable or unsafe code is found — flag it clearly. If the user ignores
   the warning, add a `// TODO!` comment to mark the issue in-place.
+- You can help writing model checking tests and unit tests if you're explicitly asked for,
+  and you MUST to notify user if the model checking or unit test have to be modified. 
 
 ### Documentation Style
 
