@@ -37,7 +37,7 @@ static NEXT: AtomicUsize = AtomicUsize::new(0);
 /// # Panics                                                                      
 /// Panics if [`POOL_PAGES`] is exhausted. Bump it if early MMU bring-up
 /// runs out of frames.                                                           
-pub fn alloc_page() -> PhysAddr {
+pub fn bump_alloc_page() -> PhysAddr {
     let idx = NEXT.fetch_add(1, Ordering::Relaxed);
     if idx >= POOL_PAGES {
         panic!("bootstrap frame allocator exhausted ({} pages)", POOL_PAGES);
@@ -45,4 +45,22 @@ pub fn alloc_page() -> PhysAddr {
     let base_va = VirtAddr::new(POOL.0.get() as usize);
     let base_pa = image_va_to_pa(base_va);
     PhysAddr::new(base_pa.as_usize() + idx * PAGE_SIZE)
+}
+
+pub fn alloc_page() -> PhysAddr {
+    match crate::buddy::BUDDY.get() {
+        Some(buddy) => {
+            let pa = buddy.lock().alloc_page().expect("buddy out of memory");
+            zero_page(pa);
+            pa
+        }
+        None => bump_alloc_page(),
+    }
+}
+
+fn zero_page(pa: PhysAddr) {
+    let va = crate::layout::pa_to_linear_va(pa);
+    unsafe {
+        core::ptr::write_bytes(va.as_usize() as *mut u8, 0, PAGE_SIZE);
+    }
 }
