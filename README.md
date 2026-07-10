@@ -169,16 +169,26 @@ page tables back to the system.
 
 ### Phase 4 — SMP (production-class)
 
-The earlier SMP bring-up was removed when the kernel moved to the upper
-half — `boot.s` isn't SMP-safe (BSS-clear race, stack collision). To
-re-enable SMP we need the buddy allocator (per-CPU stacks) and a clean
-secondary entry point.
+Secondaries are brought up in the upper half: PSCI `CPU_ON` lands each on
+a physical entry, a per-CPU MMU trampoline installs the runtime translation,
+and it resumes in the kernel's virtual address space. Confirmed on
+`qemu -smp 4` — all secondaries reach `secondary_cpu_main`.
 
-- [ ] Secondary entry point in `boot.s` (no BSS clear, no MMU build)
-- [ ] Per-CPU stacks allocated from buddy (one per online CPU)
-- [ ] `TPIDR_EL1` as per-CPU pointer (`install_current_cpu_local`, `current_cpu`)
-- [ ] PSCI `CPU_ON` for each secondary, online barrier
-- [ ] Spin-locks (atomic → ticket → MCS as contention grows)
+- [x] Secondary entry point (`secondary.s`): MMU trampoline onto the runtime
+      root (identity TTBR0 to survive the `SCTLR.M` flip), no BSS clear / build
+- [x] Per-CPU stacks allocated from the buddy (one per online CPU)
+- [x] `TPIDR_EL1` as per-CPU pointer (`install_current_cpu_local`, `current_cpu`)
+- [x] PSCI `CPU_ON` for each secondary, online barrier (`mark_online` / `wait_for`)
+- [x] Spin-locks (`SpinLock`, single-init `Once`); ticket / MCS deferred until
+      contention shows
+- [ ] Kernel stack overflow protection — **mechanism to be decided**. A guard
+      page (invalid in the MMU) is cheap defense-in-depth but needs L3
+      block-splitting in the linear map or a dedicated stack VA region; the
+      seL4-tradition answer is a small run-to-completion per-CPU stack with a
+      proven depth bound (and revisiting today's 64 KiB size). Think it through
+      before building
+- [ ] Per-CPU slab caches + slab reclaim (fast path on a `TPIDR_EL1`-local
+      free-list; slow path the current global slab)
 - [ ] IPI (software-generated interrupts via GIC)
 
 ### Phase 5 — Time and interrupts
