@@ -49,6 +49,11 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
     kernel_uart_log!("buddy up: {} free frames", buddy.free_frames());
     BUDDY.call_once(|| SpinLock::new(buddy));
 
+    let psci = kernel_cpu::psci::Psci::from_fdt(&fdt).expect("no /psci node");
+    kernel_cpu::Smp::bring_up_all(root, &fdt, &psci).expect("SMP bring-up failed");
+
+    unsafe { reclaim_trampoline() };
+
     let p1 = kernel_mm::frame::alloc_page();
     let p2 = kernel_mm::frame::alloc_page();
     kernel_uart_direct_log!("buddy alloc: {:#x}, {:#x}", p1.as_usize(), p2.as_usize());
@@ -98,8 +103,6 @@ fn init_buddy(mut boot: BootMem) -> BuddyAllocator {
         buddy.free_range(pfn, h.frames as usize);
     });
 
-    unsafe { reclaim_trampoline(&mut buddy) };
-
     buddy
 }
 
@@ -109,12 +112,14 @@ fn parse_fdt(dtb: usize) -> fdt::Fdt<'static> {
 
 /// # Safety
 /// Caller guarantees to call it obly once and only right after buddy allocator was created
-unsafe fn reclaim_trampoline(buddy: &mut BuddyAllocator) {
+unsafe fn reclaim_trampoline() {
+    let mut buddy = unsafe { BUDDY.get().unwrap_unchecked().lock() };
     let bb_start = &raw const __boot_bss_start as usize;
     let bb_end = &raw const __boot_bss_end as usize;
     let bb_pages = (bb_end - bb_start) / PAGE_SIZE;
 
-    buddy.free_range(buddy.pfn_of(PhysAddr::new(bb_start)), bb_pages);
+    let a = buddy.pfn_of(PhysAddr::new(bb_start));
+    buddy.free_range(a, bb_pages);
     kernel_uart_direct_log!("reclaimed {} trampoline pages", bb_pages);
 }
 
