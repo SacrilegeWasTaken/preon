@@ -159,8 +159,8 @@ page tables back to the system.
 - [x] Buddy allocator (Linux-style orders, free-lists by order) — core
       formally verified with Kani (`alloc` split, `free` coalesce, `free_range`
       carve, mass conservation; see [`docs/VERIFICATION.md`](docs/VERIFICATION.md))
-- [ ] Initialize from DTB memory map minus kernel image + reserved regions
-- [ ] Replace `kernel_mm::frame::alloc_page` to back onto buddy
+- [x] Initialize from DTB memory map minus kernel image + reserved regions
+- [x] Replace `kernel_mm::frame::alloc_page` to back onto buddy
 - [ ] Reclaim `.boot.bss` trampoline page tables (~36 KiB) after `disable_ttbr0`
 - [ ] Memory zones (DMA / normal) hint — can stay flat for now
 - [ ] `#[global_allocator]` slab on top of buddy, `alloc::` available

@@ -67,6 +67,14 @@ ranges larger than `2^10` frames are correct by inspection, outside the model.
   invariant, but it cross-checks *assembly*, so it belongs in a
   `const _: () = assert!(offset_of!(TrapFrame, elr_el1) == 31*8 + 8)` static
   assertion, not a Kani harness.
+- `sync::SpinLock`, `sync::Once`, and anything atomic-state-machine — two
+  reasons. (1) The *point* of these is cross-CPU concurrency, which single-
+  threaded Kani cannot model. (2) On an aarch64 Kani host, `core::hint::`
+  `spin_loop()` lowers to `llvm.aarch64.isb`, an intrinsic Kani rejects
+  ([kani #2423](https://github.com/model-checking/kani/issues/2423)); reaching
+  it makes reachability unsound and spuriously fails otherwise-correct
+  harnesses. Their correctness rests on the `Acquire`/`Release` ordering,
+  reviewed by hand.
 
 ---
 
