@@ -4,6 +4,8 @@
 use core::arch::global_asm;
 use core::panic::PanicInfo;
 
+extern crate alloc;
+use fdt::Fdt;
 use kernel_arch::{
     mm::{PhysAddr, VirtAddr},
     wfe_loop,
@@ -23,37 +25,49 @@ global_asm!(include_str!("asm/boot.s"));
 
 unsafe extern "C" {
     static __stack_top_pa: u8;
+    static __boot_bss_start: u8;
+    static __boot_bss_end: u8;
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain(dtb: usize) -> ! {
     ExceptionVectors::install();
-
     kernel_uart_log!("Hello from ExOS!");
 
-    let fdt = unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }.expect("DTB error. Check QEMU conf.");
-    kernel_mm::ram::for_each_region(&fdt, |region| {
-        kernel_uart_log!(
-            "RAM region: base=0x{:x} size=0x{:x}",
-            region.base.as_usize(),
-            region.size
-        );
-    });
+    let fdt = parse_fdt(dtb);
+    let root = kernel_mm::kernel_map::build(&fdt);
+    kernel_uart_log!("kernel_map built, root at 0x{:x}", root.as_usize());
 
-    let new_root = kernel_mm::kernel_map::build(&fdt);
-    kernel_uart_log!("kernel_map built, root at 0x{:x}", new_root.as_usize());
-
-    unsafe { kernel_mm::mmu::switch_ttbr1(new_root) };
+    unsafe { kernel_mm::mmu::switch_ttbr1(root) };
     kernel_uart_log!("TTBR1 switched");
 
-    unsafe {
-        kernel_mm::mmu::disable_ttbr0();
-    }
-
+    unsafe { kernel_mm::mmu::disable_ttbr0() };
     kernel_uart_log!("TTBR0 disabled");
+
+    let boot = build_bootmem(&fdt, dtb);
+    let buddy = init_buddy(boot);
+    kernel_uart_log!("buddy up: {} free frames", buddy.free_frames());
+    BUDDY.call_once(|| SpinLock::new(buddy));
+
+    let p1 = kernel_mm::frame::alloc_page();
+    let p2 = kernel_mm::frame::alloc_page();
+    kernel_uart_direct_log!("buddy alloc: {:#x}, {:#x}", p1.as_usize(), p2.as_usize());
+
+    let v = alloc::vec![1u32, 2, 3, 4];
+    kernel_uart_direct_log!("vec len={} @ {:p}", v.len(), v.as_ptr());
+    let b = alloc::boxed::Box::new(0xDEADBEEFu64);
+    kernel_uart_direct_log!("box {:#x} @ {:p}", *b, core::ptr::addr_of!(*b));
+
+    kernel_uart_direct_log!("Triggering exception...");
+    unsafe { core::arch::asm!("udf #0") }
+
+    wfe_loop!();
+}
+
+fn build_bootmem(fdt: &Fdt, dtb: usize) -> BootMem {
     let mut boot = BootMem::new();
 
-    kernel_mm::ram::for_each_region(&fdt, |r| {
+    kernel_mm::ram::for_each_region(fdt, |r| {
         let base = r.base.as_usize();
         boot.add_memory_bytes(base, base + r.size);
     });
@@ -64,12 +78,12 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
     let fdt_pa = linear_va_to_pa(VirtAddr::new(dtb)).as_usize();
     boot.reserve_bytes(fdt_pa, fdt_pa + fdt.total_size());
 
-    boot.for_each_free(|h| {
-        kernel_uart_log!("free: pfn 0x{:x}..0x{:x}", h.base, h.base + h.frames);
-    });
+    boot
+}
 
-    let dram_base = PhysAddr::new(0x4000_0000);
-    let nr_frames = 0x80000;
+fn init_buddy(mut boot: BootMem) -> BuddyAllocator {
+    let (base_pfn, nr_frames) = boot.ram_span();
+    let dram_base = PhysAddr::new(base_pfn as usize * PAGE_SIZE);
 
     let mm_frames = BuddyAllocator::memmap_frames(nr_frames);
     let mm_pfn = boot
@@ -84,19 +98,24 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
         buddy.free_range(pfn, h.frames as usize);
     });
 
-    kernel_uart_log!("buddy up: {} free frames", buddy.free_frames());
+    unsafe { reclaim_trampoline(&mut buddy) };
 
-    BUDDY.call_once(|| SpinLock::new(buddy));
+    buddy
+}
 
-    let p1 = kernel_mm::frame::alloc_page();
-    let p2 = kernel_mm::frame::alloc_page();
+fn parse_fdt(dtb: usize) -> fdt::Fdt<'static> {
+    unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }.expect("DTB error. Check QEMU conf.")
+}
 
-    kernel_uart_direct_log!("buddy alloc: {:#x}, {:#x}", p1.as_usize(), p2.as_usize());
+/// # Safety
+/// Caller guarantees to call it obly once and only right after buddy allocator was created
+unsafe fn reclaim_trampoline(buddy: &mut BuddyAllocator) {
+    let bb_start = &raw const __boot_bss_start as usize;
+    let bb_end = &raw const __boot_bss_end as usize;
+    let bb_pages = (bb_end - bb_start) / PAGE_SIZE;
 
-    kernel_uart_direct_log!("Triggering exception...");
-    unsafe { core::arch::asm!("udf #0") }
-
-    wfe_loop!();
+    buddy.free_range(buddy.pfn_of(PhysAddr::new(bb_start)), bb_pages);
+    kernel_uart_direct_log!("reclaimed {} trampoline pages", bb_pages);
 }
 
 #[panic_handler]
