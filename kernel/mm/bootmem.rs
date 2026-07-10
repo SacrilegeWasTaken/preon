@@ -1,12 +1,13 @@
 use crate::frame::PAGE_SIZE;
 
 #[derive(Clone, Copy)]
-struct Region {
-    base: u32,
-    frames: u32,
+pub struct Region {
+    pub base: u32,
+    pub frames: u32,
 }
 
 impl Region {
+    const ZERO: Self = Self { base: 0, frames: 0 };
     fn end(&self) -> u32 {
         self.base + self.frames
     }
@@ -18,7 +19,7 @@ impl Region {
 
 const NR_REGIONS: usize = 128;
 
-struct BootMem {
+pub struct BootMem {
     memory: [Region; NR_REGIONS],
     n_memory: usize,
     reserved: [Region; NR_REGIONS],
@@ -26,6 +27,16 @@ struct BootMem {
 }
 
 impl BootMem {
+    #[allow(clippy::new_without_default)]
+    pub const fn new() -> Self {
+        Self {
+            memory: [Region::ZERO; NR_REGIONS],
+            n_memory: 0,
+            reserved: [Region::ZERO; NR_REGIONS],
+            n_reserved: 0,
+        }
+    }
+
     fn add_memory(&mut self, base: u32, frames: u32) {
         debug_assert!(frames >= 1);
         assert!(
@@ -51,13 +62,13 @@ impl BootMem {
         self.n_reserved += 1;
     }
 
-    fn reserve_bytes(&mut self, base_pa: usize, end_pa: usize) {
+    pub fn reserve_bytes(&mut self, base_pa: usize, end_pa: usize) {
         let base = (base_pa / PAGE_SIZE) as u32;
         let end = end_pa.div_ceil(PAGE_SIZE) as u32;
         self.reserve(base, end - base);
     }
 
-    fn add_memory_bytes(&mut self, base_pa: usize, end_pa: usize) {
+    pub fn add_memory_bytes(&mut self, base_pa: usize, end_pa: usize) {
         let base = base_pa.div_ceil(PAGE_SIZE) as u32;
         let end = (end_pa / PAGE_SIZE) as u32;
         if end > base {
@@ -65,7 +76,7 @@ impl BootMem {
         }
     }
 
-    fn for_each_free(&self, mut f: impl FnMut(Region)) {
+    pub fn for_each_free(&self, mut f: impl FnMut(Region)) {
         for m in &self.memory[..self.n_memory] {
             let mut cursor = m.base;
             for r in &self.reserved[..self.n_reserved] {
@@ -89,7 +100,7 @@ impl BootMem {
         }
     }
 
-    fn alloc(&mut self, frames: u32, align: u32) -> Option<u32> {
+    pub fn alloc(&mut self, frames: u32, align: u32) -> Option<u32> {
         debug_assert!(frames >= 1 && align >= 1);
 
         let mut best: Option<u32> = None;
