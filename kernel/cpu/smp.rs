@@ -1,9 +1,11 @@
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use kernel_arch::mm::PhysAddr;
+use kernel_arch::mm::{PhysAddr, VirtAddr};
 use kernel_arch::wfe_loop;
 use kernel_builtin::kernel_uart_log;
+use kernel_mm::layout::image_va_to_pa;
+use kernel_mm::types::VirtAddrSize;
 
 use crate::psci::{Psci, PsciError};
 use crate::types::{CpuId, Mpidr};
@@ -40,6 +42,7 @@ pub struct CpuData {
 pub struct SecondaryBootData {
     pub cpu_data_ptr: *const CpuData,
     pub stack_top: usize,
+    pub ttbr1_root: usize,
 }
 
 #[repr(C, align(16))]
@@ -83,6 +86,7 @@ static BOOT_DATA: [BootDataCell; MAX_CPUS] = [const {
     BootDataCell(UnsafeCell::new(SecondaryBootData {
         cpu_data_ptr: core::ptr::null(),
         stack_top: 0,
+        ttbr1_root: 0,
     }))
 }; MAX_CPUS];
 
@@ -163,18 +167,19 @@ impl Smp {
 
     /// Fill the static `BOOT_DATA` slot for `cpu` and return a pointer
     /// suitable for PSCI's `ctx` argument.
-    pub fn prepare_boot_data(cpu: CpuId) -> *const SecondaryBootData {
+    pub fn prepare_boot_data(cpu: CpuId, root: PhysAddr) -> *const SecondaryBootData {
         let ptr = BOOT_DATA[cpu.as_usize()].0.get();
         unsafe {
             (*ptr).cpu_data_ptr = Self::cpu_data(cpu) as *const CpuData;
             (*ptr).stack_top = Self::stack_top(cpu);
+            (*ptr).ttbr1_root = root.as_usize();
         }
         ptr as *const _
     }
 
     /// Physical address of the assembler trampoline secondaries land in.
     pub fn entry_addr() -> PhysAddr {
-        PhysAddr::new(secondary_entry as *const () as usize)
+        image_va_to_pa(VirtAddr::new(secondary_entry as *const () as usize))
     }
 
     /// Bring up every secondary CPU listed in the device tree. The primary
@@ -183,7 +188,7 @@ impl Smp {
     ///
     /// Returns once every requested CPU has reached `secondary_cpu_main`
     /// and called `mark_online`.
-    pub fn bring_up_all(fdt: &fdt::Fdt, psci: &Psci) -> Result<(), BringUpError> {
+    pub fn bring_up_all(root: PhysAddr, fdt: &fdt::Fdt, psci: &Psci) -> Result<(), BringUpError> {
         let primary_mpidr = Mpidr::current();
 
         Self::init_cpu(CpuId::PRIMARY, primary_mpidr);
@@ -202,12 +207,11 @@ impl Smp {
 
             let cpu = CpuId::new(next_idx);
             Self::init_cpu(cpu, mpidr);
-            let ctx = PhysAddr::new(Self::prepare_boot_data(cpu) as usize);
 
-            // Make the writes above visible to the secondary before it
-            // ever loads from BOOT_DATA / CPU_DATA.
+            let bd_va = Self::prepare_boot_data(cpu, root);
+            clean_dcache(bd_va as usize, core::mem::size_of::<SecondaryBootData>());
+            let ctx = image_va_to_pa(VirtAddr::new(bd_va as usize));
             core::sync::atomic::fence(Ordering::Release);
-
             psci.cpu_on(mpidr, Self::entry_addr(), ctx)
                 .map_err(|e| BringUpError::Psci(mpidr, e))?;
 
@@ -268,4 +272,16 @@ extern "C" fn secondary_cpu_main(_boot_data: &SecondaryBootData) -> ! {
     );
     Smp::mark_online(cpu.cpu_id);
     wfe_loop!()
+}
+
+/// Clean [va, va+len) to the Point of Coherency so a secondary reading it with
+/// the MMU off (non-cacheable) sees the primary's cacheable writes. :wa
+fn clean_dcache(va: usize, len: usize) {
+    const LINE: usize = 64; // over-clean on 128-B lines is fine
+    let mut p = va & !(LINE - 1);
+    while p < va + len {
+        unsafe { core::arch::asm!("dc cvac, {}", in(reg) p, options(nostack, preserves_flags)) };
+        p += LINE;
+    }
+    unsafe { core::arch::asm!("dsb ish", options(nostack, preserves_flags)) };
 }

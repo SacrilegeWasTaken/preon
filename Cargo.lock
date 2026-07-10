@@ -35,6 +35,7 @@ dependencies = [
  "fdt",
  "kernel_arch",
  "kernel_builtin",
+ "kernel_mm",
 ]
 
 [[package]]
