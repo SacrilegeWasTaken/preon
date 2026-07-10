@@ -1,3 +1,12 @@
+//! Buddy physical page allocator — the kernel's page-granular allocator.
+//!
+//! Free blocks are kept in per-order free-lists (orders `0..MAX_ORDER`, block
+//! `= 2^order` frames). `alloc` splits the smallest sufficient block down;
+//! `free` coalesces with its buddy up the orders; `free_range` seeds the lists
+//! from a contiguous run. A 16-byte [`PageInfo`] per frame (the mem-map) holds
+//! each frame's state and free-list links. The split/coalesce/carve core is
+//! Kani-verified on a bounded model; see `docs/VERIFICATION.md`.
+
 use core::sync::atomic::AtomicU32;
 
 use kernel_arch::mm::PhysAddr;
@@ -135,8 +144,13 @@ enum PageState {
 
 const MAX_ORDER: usize = 11;
 
+/// The global buddy allocator, installed once by `kmain` after hand-off.
+/// `get()` is `None` until then — callers (e.g. `frame::alloc_page`) fall back
+/// to the boot bump pool.
 pub static BUDDY: Once<SpinLock<BuddyAllocator>> = Once::new();
 
+/// A buddy allocator over a contiguous frame range `[dram_base, +nr_frames)`,
+/// backed by a `pages` mem-map (one [`PageInfo`] per frame).
 pub struct BuddyAllocator {
     pages: &'static mut [PageInfo],
     dram_base: PhysAddr,

@@ -1,8 +1,16 @@
+//! Synchronisation primitives: a spin-lock and a single-init [`Once`] cell.
+//!
+//! Both are correct by hand review, not Kani — their purpose is cross-CPU
+//! concurrency, which single-threaded model checking cannot exercise (and on an
+//! aarch64 host `spin_loop()` lowers to an intrinsic Kani rejects).
+
 use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
 use core::ops::Drop;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
+/// A spinning mutual-exclusion lock. [`lock`](SpinLock::lock) busy-waits with
+/// acquire/release ordering; the returned guard releases on drop.
 pub struct SpinLock<T> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
@@ -26,6 +34,8 @@ impl<T> SpinLock<T> {
     }
 }
 
+/// RAII guard for a held [`SpinLock`]. Derefs to the protected data and
+/// releases the lock when dropped.
 pub struct SpinLockGuard<'a, T> {
     lock: &'a SpinLock<T>,
 }

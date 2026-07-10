@@ -1,7 +1,14 @@
+//! Physical frame allocation.
+//!
+//! [`alloc_page`] is the kernel's page source: it routes to the buddy allocator
+//! once `BUDDY` is up and falls back to a small `.bss` bump pool during early
+//! boot (page tables before the buddy exists). Buddy pages are zeroed before
+//! return; bump pages start zeroed in `.bss`.
+
 use core::cell::UnsafeCell;
 
 /// Page size in bytes. 4 KiB granule — must match the granule programmed
-/// in `tcr::TCR_VALUE`.  
+/// in `tcr::TCR_VALUE`.
 pub const PAGE_SIZE: usize = 4096;
 
 const POOL_PAGES: usize = 32;

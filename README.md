@@ -161,9 +161,11 @@ page tables back to the system.
       carve, mass conservation; see [`docs/VERIFICATION.md`](docs/VERIFICATION.md))
 - [x] Initialize from DTB memory map minus kernel image + reserved regions
 - [x] Replace `kernel_mm::frame::alloc_page` to back onto buddy
-- [ ] Reclaim `.boot.bss` trampoline page tables (~36 KiB) after `disable_ttbr0`
+- [x] Reclaim `.boot.bss` trampoline page tables (~48 KiB) after `disable_ttbr0`
 - [ ] Memory zones (DMA / normal) hint — can stay flat for now
-- [ ] `#[global_allocator]` slab on top of buddy, `alloc::` available
+- [x] `#[global_allocator]` slab on top of buddy (size-class free-lists,
+      buddy-backed pages), Kani-verified core; `alloc::` available. Per-CPU
+      caches and slab reclaim deferred to Phase 4
 
 ### Phase 4 — SMP (production-class)
 
