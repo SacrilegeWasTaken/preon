@@ -1,6 +1,7 @@
 use core::cell::UnsafeCell;
+use core::mem::MaybeUninit;
 use core::ops::Drop;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 pub struct SpinLock<T> {
     locked: AtomicBool,
@@ -45,5 +46,56 @@ impl<'a, T> core::ops::DerefMut for SpinLockGuard<'a, T> {
 impl<'a, T> Drop for SpinLockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.locked.store(false, Ordering::Release);
+    }
+}
+
+const UNINIT: u8 = 0;
+const RUNNING: u8 = 1;
+const READY: u8 = 2;
+
+/// Single-initialisation cell. `call_once` runs the initialiser exactly once
+/// across all CPUs; everyone else observes the stored value.
+pub struct Once<T> {
+    state: AtomicU8,
+    value: UnsafeCell<MaybeUninit<T>>,
+}
+
+// A shared `&T` crosses CPUs → T: Sync; the value is moved in → T: Send.
+unsafe impl<T: Send + Sync> Sync for Once<T> {}
+unsafe impl<T: Send> Send for Once<T> {}
+
+impl<T> Once<T> {
+    #[allow(clippy::new_without_default)]
+    pub const fn new() -> Self {
+        Self {
+            state: AtomicU8::new(UNINIT),
+            value: UnsafeCell::new(MaybeUninit::uninit()),
+        }
+    }
+
+    pub fn call_once(&self, f: impl FnOnce() -> T) -> &T {
+        if self
+            .state
+            .compare_exchange(UNINIT, RUNNING, Ordering::Acquire, Ordering::Acquire)
+            .is_ok()
+        {
+            let v = f();
+            unsafe { (*self.value.get()).write(v) };
+            self.state.store(READY, Ordering::Release); // publishes the write
+        } else {
+            while self.state.load(Ordering::Acquire) != READY {
+                core::hint::spin_loop();
+            }
+        }
+        // Safe: state is READY and the value-write happened-before (Acquire/Release).
+        unsafe { (*self.value.get()).assume_init_ref() }
+    }
+
+    pub fn get(&self) -> Option<&T> {
+        if self.state.load(Ordering::Acquire) == READY {
+            Some(unsafe { (*self.value.get()).assume_init_ref() })
+        } else {
+            None
+        }
     }
 }
