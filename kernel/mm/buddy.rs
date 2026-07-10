@@ -1,6 +1,7 @@
 use core::sync::atomic::AtomicU32;
 
 use kernel_arch::mm::PhysAddr;
+use kernel_builtin::sync::{Once, SpinLock};
 
 use crate::frame::PAGE_SIZE;
 
@@ -12,7 +13,7 @@ const _: () = assert!(align_of::<PageInfo>() == 4);
 mod pfn {
     #[repr(transparent)]
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-    pub(super) struct Pfn(u32);
+    pub struct Pfn(u32);
 
     impl Pfn {
         pub(super) fn new_unchecked(raw: u32) -> Self {
@@ -134,9 +135,9 @@ enum PageState {
 
 const MAX_ORDER: usize = 11;
 
-// static BUDDY: SpinLock<BuddyAllocator> = todo!();
+pub static BUDDY: Once<SpinLock<BuddyAllocator>> = Once::new();
 
-struct BuddyAllocator {
+pub struct BuddyAllocator {
     pages: &'static mut [PageInfo],
     dram_base: PhysAddr,
     nr_frames: usize,
@@ -159,20 +160,23 @@ impl BuddyAllocator {
         }
     }
 
-    fn alloc_pages(&mut self, order: u8) -> Option<PhysAddr> {
+    pub fn free_frames(&self) -> usize {
+        self.free_frames
+    }
+    pub fn alloc_pages(&mut self, order: u8) -> Option<PhysAddr> {
         self.alloc(order).map(|pfn| self.pa_of(pfn))
     }
 
-    fn alloc_page(&mut self) -> Option<PhysAddr> {
+    pub fn alloc_page(&mut self) -> Option<PhysAddr> {
         self.alloc_pages(0)
     }
 
-    fn free_pages(&mut self, pa: PhysAddr, order: u8) {
+    pub fn free_pages(&mut self, pa: PhysAddr, order: u8) {
         let pfn = self.pfn_of(pa);
         self.free(pfn, order);
     }
 
-    fn pfn_of(&self, pa: PhysAddr) -> Pfn {
+    pub fn pfn_of(&self, pa: PhysAddr) -> Pfn {
         debug_assert!(
             self.dram_base.as_usize() <= pa.as_usize()
                 && pa.as_usize() < (self.dram_base.as_usize() + self.nr_frames * PAGE_SIZE)
@@ -290,7 +294,7 @@ impl BuddyAllocator {
         align.min(size) as u8
     }
 
-    fn free_range(&mut self, start: Pfn, count: usize) {
+    pub fn free_range(&mut self, start: Pfn, count: usize) {
         debug_assert!((start.raw() as usize) + count <= self.nr_frames);
         let mut pfn = start.raw();
         let end = pfn + count as u32;
@@ -309,6 +313,24 @@ impl BuddyAllocator {
 
             pfn += 1 << order;
         }
+    }
+    /// Frames needed for a mem-map of one PageInfo per frame.
+    pub fn memmap_frames(nr_frames: usize) -> usize {
+        (nr_frames * size_of::<PageInfo>()).div_ceil(PAGE_SIZE)
+    }
+
+    /// Build an allocator whose mem-map lives at `mm_pa` (physical, reachable via
+    /// the linear map). Marks every frame Reserved — populate with `free_range`.
+    ///
+    /// # Safety
+    /// `mm_pa` must point at `memmap_frames(nr_frames) * PAGE_SIZE` bytes of
+    /// mapped, page-aligned RAM reserved for the mem-map (e.g. from
+    /// `bootmem.alloc`). Nothing else may alias it.
+    pub unsafe fn new_at(mm_pa: PhysAddr, dram_base: PhysAddr, nr_frames: usize) -> Self {
+        let va = crate::layout::pa_to_linear_va(mm_pa);
+        let pages =
+            unsafe { core::slice::from_raw_parts_mut(va.as_usize() as *mut PageInfo, nr_frames) };
+        Self::new(pages, dram_base, nr_frames)
     }
 }
 
@@ -828,5 +850,18 @@ mod verification {
 
         assert!(a.free_area[2] == Some(f0));
         assert!(a.free_frames == 4);
+    }
+
+    /// The mem-map sizing holds exactly one `PageInfo` per frame: enough bytes
+    /// for `n` descriptors, and no more than one page of slack.
+    #[kani::proof]
+    fn memmap_frames_is_enough() {
+        let n: usize = kani::any();
+        kani::assume(n <= (1 << 30)); // keep n * 16 well within usize
+
+        let frames = BuddyAllocator::memmap_frames(n);
+
+        assert!(frames * PAGE_SIZE >= n * size_of::<PageInfo>());
+        assert!(n == 0 || (frames - 1) * PAGE_SIZE < n * size_of::<PageInfo>());
     }
 }
