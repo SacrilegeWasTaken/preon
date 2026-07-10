@@ -9,6 +9,7 @@ pub mod layout;
 pub mod mmu;
 pub mod page_table;
 pub mod ram;
+pub mod slab;
 pub mod tcr;
 pub mod types;
 
