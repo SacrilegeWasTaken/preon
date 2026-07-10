@@ -1,5 +1,15 @@
+//! Boot-time physical memory allocator (memblock-style).
+//!
+//! Two fixed-capacity interval lists — `memory` (RAM from the FDT) and
+//! `reserved` (kernel image, DTB, early allocations). [`BootMem::alloc`] carves
+//! a top-down aligned block from the free gaps; [`BootMem::for_each_free`]
+//! yields every RAM frame not reserved, for hand-off to the buddy allocator.
+//! Retired once the buddy is up. The interval algebra — overlap, hole carve,
+//! alloc safety, byte rounding, and the RAM span — is Kani-verified.
+
 use crate::frame::PAGE_SIZE;
 
+/// A frame interval `[base, base + frames)` in absolute PFNs (`pa / PAGE_SIZE`).
 #[derive(Clone, Copy)]
 pub struct Region {
     pub base: u32,
@@ -19,6 +29,8 @@ impl Region {
 
 const NR_REGIONS: usize = 128;
 
+/// Fixed-capacity `memory` / `reserved` interval lists. `reserved` is kept
+/// sorted by base so [`BootMem::for_each_free`]'s carve is a single pass.
 pub struct BootMem {
     memory: [Region; NR_REGIONS],
     n_memory: usize,
@@ -35,6 +47,19 @@ impl BootMem {
             reserved: [Region::ZERO; NR_REGIONS],
             n_reserved: 0,
         }
+    }
+
+    /// Span from the lowest RAM frame to the highest: (base pfn, frame count).
+    /// The buddy mem-map covers this whole range; inter-region gaps stay Reserved.
+    pub fn ram_span(&self) -> (u32, usize) {
+        assert!(self.n_memory > 0, "bootmem: no memory regions");
+        let mut lo = u32::MAX;
+        let mut hi = 0;
+        for m in &self.memory[..self.n_memory] {
+            lo = lo.min(m.base);
+            hi = hi.max(m.end());
+        }
+        (lo, (hi - lo) as usize)
     }
 
     fn add_memory(&mut self, base: u32, frames: u32) {
@@ -385,5 +410,37 @@ mod verification {
         // free gaps are [0,2) and [4,8); the largest is 4 frames.
         assert!(bm.alloc(5, 1) == None);
         assert!(bm.n_reserved == 1);
+    }
+
+    /// `ram_span` covers every RAM region: its base is at/below every region
+    /// base, and its end at/above every region end.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn ram_span_covers_all_regions() {
+        let mut bm = empty_bootmem();
+
+        let b0: u32 = kani::any();
+        let f0: u32 = kani::any();
+        let b1: u32 = kani::any();
+        let f1: u32 = kani::any();
+        kani::assume(f0 >= 1 && f1 >= 1);
+        kani::assume(b0 <= (1 << 20) && f0 <= (1 << 20));
+        kani::assume(b1 <= (1 << 20) && f1 <= (1 << 20));
+
+        bm.memory[0] = Region {
+            base: b0,
+            frames: f0,
+        };
+        bm.memory[1] = Region {
+            base: b1,
+            frames: f1,
+        };
+        bm.n_memory = 2;
+
+        let (base, nr) = bm.ram_span();
+
+        assert!(base <= b0 && base <= b1); // base at/below every region base
+        assert!((base as usize) + nr >= (b0 + f0) as usize); // end at/above ends
+        assert!((base as usize) + nr >= (b1 + f1) as usize);
     }
 }
