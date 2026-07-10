@@ -4,8 +4,8 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use kernel_arch::mm::{PhysAddr, VirtAddr};
 use kernel_arch::wfe_loop;
 use kernel_builtin::kernel_uart_log;
-use kernel_mm::layout::image_va_to_pa;
-use kernel_mm::types::VirtAddrSize;
+use kernel_mm::buddy::BUDDY;
+use kernel_mm::layout::{image_va_to_pa, pa_to_linear_va};
 
 use crate::psci::{Psci, PsciError};
 use crate::types::{CpuId, Mpidr};
@@ -34,7 +34,6 @@ pub const STACK_SIZE: usize = 64 * 1024;
 pub struct CpuData {
     pub cpu_id: CpuId,
     pub mpidr: Mpidr,
-    pub stack_top: usize,
 }
 
 /// Data block handed to a secondary CPU through the PSCI `ctx` argument.
@@ -48,10 +47,6 @@ pub struct SecondaryBootData {
 #[repr(C, align(16))]
 struct CpuDataCell(UnsafeCell<CpuData>);
 unsafe impl Sync for CpuDataCell {}
-
-#[repr(C, align(16))]
-struct CpuStack(UnsafeCell<[u8; STACK_SIZE]>);
-unsafe impl Sync for CpuStack {}
 
 #[repr(C, align(16))]
 struct BootDataCell(UnsafeCell<SecondaryBootData>);
@@ -72,12 +67,8 @@ static CPU_DATA: [CpuDataCell; MAX_CPUS] = [const {
     CpuDataCell(UnsafeCell::new(CpuData {
         cpu_id: CpuId::PRIMARY,
         mpidr: Mpidr::new(0),
-        stack_top: 0,
     }))
 }; MAX_CPUS];
-
-static SECONDARY_STACKS: [CpuStack; MAX_CPUS] =
-    [const { CpuStack(UnsafeCell::new([0u8; STACK_SIZE])) }; MAX_CPUS];
 
 /// # Safety
 ///
@@ -101,6 +92,7 @@ pub enum BringUpError {
     TooManyCpus,
     /// PSCI rejected `CPU_ON` for a particular CPU.
     Psci(Mpidr, PsciError),
+    OutOfMemory,
 }
 
 /// Typed facade over the kernel's SMP state.
@@ -140,15 +132,7 @@ impl Smp {
         unsafe {
             (*ptr).cpu_id = cpu;
             (*ptr).mpidr = mpidr;
-            (*ptr).stack_top = Self::stack_top(cpu);
         }
-    }
-
-    /// Top of the stack reserved for `cpu`. Stacks grow down, so this is
-    /// the address loaded into `SP` when the CPU first runs.
-    pub fn stack_top(cpu: CpuId) -> usize {
-        let base = SECONDARY_STACKS[cpu.as_usize()].0.get() as usize;
-        base + STACK_SIZE
     }
 
     /// Reference to `cpu`'s control block. Valid for the lifetime of the
@@ -167,11 +151,15 @@ impl Smp {
 
     /// Fill the static `BOOT_DATA` slot for `cpu` and return a pointer
     /// suitable for PSCI's `ctx` argument.
-    pub fn prepare_boot_data(cpu: CpuId, root: PhysAddr) -> *const SecondaryBootData {
+    pub fn prepare_boot_data(
+        cpu: CpuId,
+        root: PhysAddr,
+        stack_top: usize,
+    ) -> *const SecondaryBootData {
         let ptr = BOOT_DATA[cpu.as_usize()].0.get();
         unsafe {
             (*ptr).cpu_data_ptr = Self::cpu_data(cpu) as *const CpuData;
-            (*ptr).stack_top = Self::stack_top(cpu);
+            (*ptr).stack_top = stack_top;
             (*ptr).ttbr1_root = root.as_usize();
         }
         ptr as *const _
@@ -208,7 +196,8 @@ impl Smp {
             let cpu = CpuId::new(next_idx);
             Self::init_cpu(cpu, mpidr);
 
-            let bd_va = Self::prepare_boot_data(cpu, root);
+            let stack_top = allock_stack().ok_or(BringUpError::OutOfMemory)?;
+            let bd_va = Self::prepare_boot_data(cpu, root, stack_top);
             clean_dcache(bd_va as usize, core::mem::size_of::<SecondaryBootData>());
             let ctx = image_va_to_pa(VirtAddr::new(bd_va as usize));
             core::sync::atomic::fence(Ordering::Release);
@@ -284,4 +273,11 @@ fn clean_dcache(va: usize, len: usize) {
         p += LINE;
     }
     unsafe { core::arch::asm!("dsb ish", options(nostack, preserves_flags)) };
+}
+
+const STACK_ORDER: u8 = 4;
+
+fn allock_stack() -> Option<usize> {
+    let pa = BUDDY.get()?.lock().alloc_pages(STACK_ORDER)?;
+    Some(pa_to_linear_va(pa).as_usize() + STACK_SIZE)
 }
