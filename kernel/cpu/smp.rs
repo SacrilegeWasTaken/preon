@@ -213,7 +213,7 @@ impl Smp {
             let cpu = CpuId::new(next_idx);
             Self::init_cpu(cpu, mpidr);
 
-            let stack_top = allock_stack().ok_or(BringUpError::OutOfMemory)?;
+            let stack_top = alloc_stack().ok_or(BringUpError::OutOfMemory)?;
             let bd_va = Self::prepare_boot_data(cpu, root, stack_top);
             clean_dcache(bd_va as usize, core::mem::size_of::<SecondaryBootData>());
             let ctx = image_va_to_pa(VirtAddr::new(bd_va as usize));
@@ -281,7 +281,7 @@ fn clean_dcache(va: usize, len: usize) {
 
 const STACK_ORDER: Order = Order::new(4);
 
-fn allock_stack() -> Option<usize> {
+fn alloc_stack() -> Option<usize> {
     let pa = BUDDY.get()?.lock().alloc_pages(STACK_ORDER)?;
     Some(pa_to_linear_va(pa).as_usize() + STACK_SIZE)
 }

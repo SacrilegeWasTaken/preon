@@ -159,7 +159,7 @@ impl FrameCount {
     pub const fn new(n: usize) -> Self {
         Self(n)
     }
-    pub const fn get(self) -> usize {
+    pub const fn raw(self) -> usize {
         self.0
     }
 }

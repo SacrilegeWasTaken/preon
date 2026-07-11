@@ -61,7 +61,7 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
 
     let boot = build_bootmem(&fdt, dtb);
     let buddy = init_buddy(boot);
-    kernel_log!("buddy up: {} free frames", buddy.free_frames().get());
+    kernel_log!("buddy up: {} free frames", buddy.free_frames().raw());
     BUDDY.call_once(|| SpinLock::new(buddy));
 
     let psci = kernel_cpu::psci::Psci::from_fdt(&fdt).expect("no /psci node");

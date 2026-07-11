@@ -80,8 +80,8 @@ const LINEAR_RAM: LeafAttrs = LeafAttrs {
     execute: Executable::None,
 };
 
-struct GlobalFrameAllocator;
-impl crate::types::FrameAllocator for GlobalFrameAllocator {
+struct KernelMapAllocator;
+impl crate::types::FrameAllocator for KernelMapAllocator {
     fn alloc_page(&mut self) -> PhysAddr {
         crate::frame::alloc_page()
     }
@@ -93,7 +93,7 @@ pub fn build(fdt: &Fdt) -> PhysAddr {
     let root_pa = alloc_page();
     let root = unsafe { PageTable::from_phys(root_pa) };
 
-    let mut alloc = GlobalFrameAllocator;
+    let mut alloc = KernelMapAllocator;
 
     build_linear(root, fdt, &mut alloc);
     build_image(root, &mut alloc);

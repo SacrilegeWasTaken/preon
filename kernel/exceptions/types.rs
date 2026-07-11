@@ -14,7 +14,7 @@ use kernel_builtin::kernel_log_raw;
 ///
 /// Layout is hardware-defined and mirrors what `save_context` /
 /// `restore_context` macros store, so adding fields requires updating the
-/// `_OFFSET` constants and `FRAME_SIZE` together.
+/// `_OFFSET` constants and `SIZE` together.
 #[derive(Debug)]
 #[repr(C)]
 pub struct TrapFrame {
@@ -29,7 +29,7 @@ impl TrapFrame {
     pub const SP_EL0_OFFSET: usize = 31 * 8;
     pub const ELR_OFFSET: usize = 31 * 8 + 8;
     pub const SPSR_OFFSET: usize = 31 * 8 + 16;
-    pub const FRAME_SIZE: usize = 272;
+    pub const SIZE: usize = 272;
 
     /// PC the interrupted code will resume at, decoded as a virtual address.
     pub fn elr(&self) -> VirtAddr {

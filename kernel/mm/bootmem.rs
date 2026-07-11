@@ -23,7 +23,7 @@ impl Region {
         frames: FrameCount::new(0),
     };
     fn end(&self) -> Pfn {
-        Pfn::new((self.base.index() + self.frames.get()) as u32)
+        Pfn::new((self.base.index() + self.frames.raw()) as u32)
     }
 
     fn overlaps(&self, o: Region) -> bool {
@@ -73,7 +73,7 @@ impl BootMem {
     }
 
     fn add_memory(&mut self, base: Pfn, frames: FrameCount) {
-        debug_assert!(frames.get() >= 1);
+        debug_assert!(frames.raw() >= 1);
         assert!(
             self.n_memory < NR_REGIONS,
             "bootmem: memory regions exhausted"
@@ -83,7 +83,7 @@ impl BootMem {
     }
 
     fn reserve(&mut self, base: Pfn, frames: FrameCount) {
-        debug_assert!(frames.get() >= 1);
+        debug_assert!(frames.raw() >= 1);
         assert!(
             self.n_reserved < NR_REGIONS,
             "bootmem: reserved regions exhausted"
@@ -136,13 +136,13 @@ impl BootMem {
     }
 
     pub fn alloc(&mut self, frames: FrameCount, align: u32) -> Option<Pfn> {
-        debug_assert!(frames.get() >= 1 && align >= 1);
+        debug_assert!(frames.raw() >= 1 && align >= 1);
 
         let mut best: Option<Pfn> = None;
         self.for_each_free(|hole| {
             if hole.frames >= frames {
                 // highest possible base in this hole
-                let top = Pfn::new((hole.end().index() - frames.get()) as u32);
+                let top = Pfn::new((hole.end().index() - frames.raw()) as u32);
                 // round DOWN to alignment
                 let cand = Pfn::new(top.raw() - (top.raw() % align));
                 if cand >= hole.base && best.map_or(true, |b| cand > b) {
@@ -318,7 +318,7 @@ mod verification {
 
         let mut freed = 0u32;
         bm.for_each_free(|r| {
-            freed += r.frames.get() as u32;
+            freed += r.frames.raw() as u32;
         });
 
         // reserved ∩ [0, m_frames)
@@ -506,7 +506,7 @@ mod verification {
         let (base, nr) = bm.ram_span();
 
         assert!(base.raw() <= b0 && base.raw() <= b1); // base at/below every region base
-        assert!(base.index() + nr.get() >= (b0 + f0) as usize); // end at/above ends
-        assert!(base.index() + nr.get() >= (b1 + f1) as usize);
+        assert!(base.index() + nr.raw() >= (b0 + f0) as usize); // end at/above ends
+        assert!(base.index() + nr.raw() >= (b1 + f1) as usize);
     }
 }

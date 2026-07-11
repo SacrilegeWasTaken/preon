@@ -154,7 +154,7 @@ pub struct BuddyAllocator {
 
 impl BuddyAllocator {
     fn new(pages: &'static mut [PageInfo], dram_base: PhysAddr, nr_frames: FrameCount) -> Self {
-        debug_assert!(nr_frames.get() <= pages.len());
+        debug_assert!(nr_frames.raw() <= pages.len());
         for p in pages.iter_mut() {
             p.mark_reserved();
         }
@@ -186,21 +186,21 @@ impl BuddyAllocator {
     pub fn pfn_of(&self, pa: PhysAddr) -> Pfn {
         debug_assert!(
             self.dram_base.as_usize() <= pa.as_usize()
-                && pa.as_usize() < (self.dram_base.as_usize() + self.nr_frames.get() * PAGE_SIZE)
+                && pa.as_usize() < (self.dram_base.as_usize() + self.nr_frames.raw() * PAGE_SIZE)
         );
         debug_assert!(pa.as_usize().is_multiple_of(PAGE_SIZE));
         Pfn::new(((pa.as_usize() - self.dram_base.as_usize()) / PAGE_SIZE) as u32)
     }
 
     fn pa_of(&self, pfn: Pfn) -> PhysAddr {
-        debug_assert!(pfn.index() < self.nr_frames.get());
+        debug_assert!(pfn.index() < self.nr_frames.raw());
         PhysAddr::new(self.dram_base.as_usize() + pfn.raw() as usize * PAGE_SIZE)
     }
 
     fn buddy_pfn(&self, pfn: Pfn, order: Order) -> Option<Pfn> {
         debug_assert!(order.index() < MAX_ORDER);
         let n = pfn.raw() ^ (1u32 << order.raw());
-        if n as usize >= self.nr_frames.get() {
+        if n as usize >= self.nr_frames.raw() {
             return None;
         }
         Some(Pfn::new(n))
@@ -302,9 +302,9 @@ impl BuddyAllocator {
     }
 
     pub fn free_range(&mut self, start: Pfn, count: FrameCount) {
-        debug_assert!((start.raw() as usize) + count.get() <= self.nr_frames.get());
+        debug_assert!((start.raw() as usize) + count.raw() <= self.nr_frames.raw());
         let mut pfn = start.raw();
-        let end = pfn + count.get() as u32;
+        let end = pfn + count.raw() as u32;
 
         while pfn < end {
             let order = self.max_order_at(Pfn::new(pfn), (end - pfn) as usize);
@@ -323,7 +323,7 @@ impl BuddyAllocator {
     }
     /// Frames needed for a mem-map of one PageInfo per frame.
     pub fn memmap_frames(nr_frames: FrameCount) -> FrameCount {
-        FrameCount::new((nr_frames.get() * size_of::<PageInfo>()).div_ceil(PAGE_SIZE))
+        FrameCount::new((nr_frames.raw() * size_of::<PageInfo>()).div_ceil(PAGE_SIZE))
     }
 
     /// Build an allocator whose mem-map lives at `mm_pa` (physical, reachable via
@@ -336,7 +336,7 @@ impl BuddyAllocator {
     pub unsafe fn new_at(mm_pa: PhysAddr, dram_base: PhysAddr, nr_frames: FrameCount) -> Self {
         let va = crate::layout::pa_to_linear_va(mm_pa);
         let pages = unsafe {
-            core::slice::from_raw_parts_mut(va.as_usize() as *mut PageInfo, nr_frames.get())
+            core::slice::from_raw_parts_mut(va.as_usize() as *mut PageInfo, nr_frames.raw())
         };
         Self::new(pages, dram_base, nr_frames)
     }
@@ -869,7 +869,7 @@ mod verification {
 
         let frames = BuddyAllocator::memmap_frames(FrameCount::new(n));
 
-        assert!(frames.get() * PAGE_SIZE >= n * size_of::<PageInfo>());
-        assert!(n == 0 || (frames.get() - 1) * PAGE_SIZE < n * size_of::<PageInfo>());
+        assert!(frames.raw() * PAGE_SIZE >= n * size_of::<PageInfo>());
+        assert!(n == 0 || (frames.raw() - 1) * PAGE_SIZE < n * size_of::<PageInfo>());
     }
 }
