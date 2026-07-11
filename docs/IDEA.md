@@ -73,6 +73,15 @@ operations. Compatibility is bought with IPC, not with kernel bloat: the
 privileged core stays capability-native no matter how many personalities
 run above it (the classic microkernel move — L4Linux, NT subsystems).
 
+A personality also gets its own **filesystem view**. A Linux process is
+handed a namespace rooted at a private `/compat/linux` subtree, so its
+`/lib`, `/etc`, and `/proc` are *that subtree's* — never the native
+system's. The ABI server rewrites the process's paths into the subtree and
+forwards them to the native VFS; small Linux-flavored servers (an
+`lx_procfs`, an `lx_devfs`) supply the synthetic trees. The native
+filesystem stays pristine, and a Linux binary running `rm -rf /` can only
+scour its own sandbox — it holds no capability to anything outside it.
+
 ### The pillars, explicitly
 
 - **Ubiquity** — one kernel from servers to embedded, MMU tiers first.
@@ -152,6 +161,100 @@ The user-facing system-call surface lives here as a userspace library:
 direct wrappers around the kernel's capability syscalls, used by
 programs written for preon. Keeping the surface in userspace lets it
 evolve without touching the kernel.
+
+---
+
+## The file protocol and per-process namespaces
+
+preon has no single global filesystem tree. Following Plan 9 and QNX, the
+"filesystem" is a **namespace of IPC channels**: a name resolves to a
+capability for the server that backs it, and one small, uniform request
+protocol drives every server the same way.
+
+- **Everything reachable is a named channel.** A disk file, a device, a
+  network connection, a window on the screen — each is reached by walking a
+  path to the server that owns it and speaking the same protocol. Mounting
+  is not a disk operation; it is binding a server's endpoint capability to a
+  prefix in a namespace. The VFS server is a router: longest-prefix match on
+  the path, strip the prefix, forward the remainder (with the caller's reply
+  capability) to the owning server.
+- **A small, uniform file protocol.** Every server — on-disk FS, device,
+  a `/proc`-style generator, a GPU — answers the same handful of requests:
+  walk a path, open (returning a per-session capability), read / write,
+  stat, close. (Plan 9's 9P is the model: a few verbs, no special cases.)
+  Because the protocol is uniform, a namespace entry can be *anything* that
+  implements it — a file on an SSD, a synthetic file computed on demand, a
+  filesystem that fetches over the network. Nothing above notices.
+- **Per-process namespaces.** There is no root shared by the whole system.
+  The root task hands each process a namespace assembled from the mounts it
+  should see — read-only system libraries here, a network endpoint there, a
+  scratch directory it may write. A process cannot reach what is not in its
+  namespace, because it holds no capability to that server's endpoint.
+  Sandboxing needs no `chroot` and no ambient-authority checks; the ports
+  simply are not there.
+- **Asynchronous, zero-copy I/O.** Bulk data never rides inside IPC
+  messages. A read is: hand the server a capability to a shared buffer, post
+  a short request, and continue; the FS and block drivers DMA straight into
+  that buffer and drop a notification when it lands. The model is
+  io_uring / completion ports, not a blocking `read()` — asynchrony is the
+  default, not an add-on.
+
+---
+
+## The system library stack
+
+Foreign source expects `malloc`, `printf`, `pthread_create`. preon supplies
+those through a layered stack — thinnest at the bottom, each layer one step
+closer to kernel IPC — so the same `printf` works whether the caller is a
+native program or a ported Linux binary.
+
+- **`libsys`** — the floor: raw `svc` stubs for the capability syscalls and
+  the IPC primitives. A few kilobytes, no policy. Everything is built on it;
+  if the syscall ABI changes, only `libsys` moves.
+- **`libpreon_{io,mem,thread}`** — thin shims that give POSIX-shaped calls a
+  home: `write` / `read` become IPC to the VFS, `mmap` / `brk` become IPC to
+  the memory server, `pthread_create` becomes a thread syscall. This is where
+  "the Unix call" turns into "the preon message".
+- **A ported `libc`** (musl or newlib) — the standard C surface with its
+  Linux syscall layer swapped for calls into `libpreon_*`. Programs link it
+  and see a normal C library.
+- **`libc++` / `libunwind`** — ride unchanged on top: the C++ standard
+  library depends only on `libc` and the allocator, never on the OS, so it
+  builds for preon with no porting. Unwinding reuses the same register /
+  context format the kernel already defines for exception entry.
+
+Native servers and drivers skip most of this: they are `#![no_std]` Rust over
+`core` + `alloc` (a `#[global_allocator]` that pulls pages from the kernel)
+talking straight to `libsys`. The heavy `libc` / `libc++` stack is only for
+foreign or POSIX-style software.
+
+Linking is **static first** — a self-contained ELF the loader can jump to
+before any FS server exists (the root task especially). A userspace dynamic
+linker (`ld.so`) that maps shared objects and resolves relocations is a later
+convenience, not a bring-up dependency.
+
+---
+
+## Toolchain and language support
+
+preon aims to be a first-class compiler target, not a fork of a compiler.
+
+- **Now — a local target.** A custom target spec (`aarch64-unknown-preon`)
+  plus Rust's `-Z build-std` compiles `core` / `alloc` / `std` against
+  preon's own `libc`. That is enough to build the whole system while the
+  syscall ABI is still moving; nothing needs upstreaming yet.
+- **Later — upstream the target.** Once the ABI settles, teach **LLVM** the
+  `preon` OS triple (a small, well-scoped patch: an `OSType` entry, ELF
+  defaults, tests). That single change lights up the whole LLVM front-end
+  fleet — clang, rustc, zig, and anything else that lowers through LLVM can
+  then emit preon binaries. Then teach **rustc** the target spec and an `std`
+  backend (the `libc` crate and `library/std/src/sys`), moving preon from
+  Rust's Tier 3 (target in-tree) toward Tier 2 (`rustup target add`).
+- **Codegen is not the runtime.** A compiler that emits preon binaries is not
+  the same as software that runs: each language still needs its runtime wired
+  to preon (Rust `std`, the C `libc`, Zig's own syscall layer). Codegen is the
+  paperwork; the runtime shims are the work — exactly the volume the porting
+  toolkits (see the README) exist to absorb.
 
 ---
 

@@ -146,7 +146,7 @@ that possible.
 - [x] Boot stub in `global_asm!`: EL2 → EL1 drop, `CPACR_EL1.FPEN`, stack, BSS clear
 - [x] PL011 UART driver (busy-wait TX), `RawUart` for emergency / panic output
 - [x] `SpinLock<T>` + global `UART` singleton with RAII guard
-- [x] `kernel_uart_log!` / `kernel_uart_direct_log!` macros with `core::fmt` formatting
+- [x] `kernel_log!` (locked) / `kernel_log_raw!` (unlocked, panic / exception) macros with `core::fmt`
 - [x] DTB parsing (`fdt`) for RAM regions and CPU enumeration
 - [x] Cargo workspace split: `kernel_core` / `kernel_builtin` / `kernel_arch` /
       `kernel_exceptions` / `kernel_cpu` / `kernel_mm`
@@ -260,7 +260,13 @@ and it resumes in the kernel's virtual address space. Confirmed on
 - [ ] Per-process address spaces (separate `TTBR0_EL1` per task)
 - [ ] ELF loader, copy-on-write fork
 - [ ] System-call entry via `svc`, narrow syscall table (seL4-inspired)
-- [ ] Userspace `init` printing through a syscall to the in-kernel UART
+- [ ] `libsys` — the floor of the system library stack: raw `svc` stubs for
+      the capability syscalls + IPC primitives, so userspace never hand-writes
+      assembly. Static linking + a minimal in-process allocator (bump /
+      linked-list) pulling pages from the kernel
+- [ ] Userspace `init` (**Vanguard**, the root task) printing through a
+      syscall to the in-kernel UART; grows into namespace assembly and
+      capability distribution once IPC lands (Phase 8)
 
 ### Phase 8 — Capabilities and IPC
 
@@ -274,6 +280,11 @@ and it resumes in the kernel's virtual address space. Confirmed on
 
 - [ ] virtio-blk driver as a userspace server
 - [ ] Minimal in-tree filesystem (read-only initramfs first)
+- [ ] VFS server as a **namespace of IPC channels** (see
+      [`docs/IDEA.md`](docs/IDEA.md)): a uniform file protocol
+      (walk / open / read / write / stat / close), longest-prefix mount
+      routing, per-process namespaces, async zero-copy reads via shared-memory
+      buffers. `devfs` / `procfs` are ordinary servers mounted into a namespace
 - [ ] virtio-net + ARP / ICMP on top
 - [ ] UART driver moves out of the kernel; in-kernel `RawUart` kept only for panics
 
@@ -293,9 +304,21 @@ once the core kernel stands:
 - **Multi-arch via the HAL** — factor the ARM64-specific bits (Layer 0)
   behind a narrow interface, then bring up a second backend (RISC-V or
   x86-64), then ARM32
+- **The system library stack** — `libpreon_{io,mem,thread}` shims over
+  `libsys`; a ported `libc` (musl or newlib) whose syscall layer targets
+  those shims; `libc++` / `libunwind` riding unchanged on `libc`; and a
+  userspace dynamic linker (`ld.so`) once static-only linking gets old.
+  Native servers stay `#![no_std]` over `core` + `alloc`
+- **Toolchain & language targets** — an `aarch64-unknown-preon` target:
+  a local JSON spec + `-Z build-std` now, then upstream the `preon` OS triple
+  to **LLVM** (one small patch lights up clang / rustc / zig at once) and a
+  target spec + `std` backend to **rustc**, moving from Rust Tier 3 (in-tree)
+  toward Tier 2 (`rustup target add`)
 - **ABI personalities** — a userspace Linux ABI server; a process tagged
-  with a personality has its syscalls shifted and routed to it over IPC,
-  so Linux binaries run without any of it leaking into the kernel
+  with a personality has its syscalls shifted and routed to it over IPC, and
+  is handed a private `/compat/linux` namespace so it sees a familiar Linux
+  filesystem without touching the native one — Linux binaries run with none
+  of it leaking into the kernel
 - **Deeper verification** — grow the Kani-checked surface as subsystems
   land; keep the TCB small enough that whole-subsystem proofs stay plausible
 - **The microcontroller tier** — MPU-based protection for no-MMU targets,
