@@ -21,6 +21,8 @@ capture. Keep them in sync when behavior changes.
 - [`docs/BOOT_CONTRACT.md`](docs/BOOT_CONTRACT.md) — the bootloader → kernel
   contract: entry state, register/FDT requirements, memory-map assumptions.
 - [`docs/IPC.md`](docs/IPC.md) — IPC and capability design notes.
+- [`docs/LINUX_ABI.md`](docs/LINUX_ABI.md) — Linux personality: native file
+  access via bound namespaces, and the kernel behaviours the ABI server fakes.
 
 ---
 

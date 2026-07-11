@@ -82,6 +82,18 @@ forwards them to the native VFS; small Linux-flavored servers (an
 filesystem stays pristine, and a Linux binary running `rm -rf /` can only
 scour its own sandbox — it holds no capability to anything outside it.
 
+That sandbox is not a prison, though. The root task can **bind** native
+subtrees into the Linux namespace — a chosen workspace appears at, say,
+`/home/you/projects` and resolves straight to the native VFS — while the
+ABI server's path map lets user paths through and rewrites only the system
+ones. A Linux editor then reads and writes native files as a first-class
+citizen, bounded not by a wall but by exactly the capabilities its
+namespace was granted (no GPU port bound in → it cannot draw). Making the
+ABI server behave like a real Linux kernel over a foreign VFS raises a set
+of concrete problems — `execve` interpreter paths, `stat` struct
+translation, advisory locks, `inotify`, open-then-`unlink` lifetimes —
+collected in [`LINUX_ABI.md`](LINUX_ABI.md).
+
 ### The pillars, explicitly
 
 - **Ubiquity** — one kernel from servers to embedded, MMU tiers first.

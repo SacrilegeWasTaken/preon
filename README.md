@@ -316,9 +316,11 @@ once the core kernel stands:
   toward Tier 2 (`rustup target add`)
 - **ABI personalities** — a userspace Linux ABI server; a process tagged
   with a personality has its syscalls shifted and routed to it over IPC, and
-  is handed a private `/compat/linux` namespace so it sees a familiar Linux
-  filesystem without touching the native one — Linux binaries run with none
-  of it leaking into the kernel
+  is handed a private `/compat/linux` namespace with native subtrees bound in,
+  so Linux binaries edit native files as first-class citizens without any of
+  it leaking into the kernel. Design + the open problems (`execve` interp
+  paths, `stat` translation, locks, `inotify`, `unlink` lifetimes) live in
+  [`docs/LINUX_ABI.md`](docs/LINUX_ABI.md)
 - **Deeper verification** — grow the Kani-checked surface as subsystems
   land; keep the TCB small enough that whole-subsystem proofs stay plausible
 - **The microcontroller tier** — MPU-based protection for no-MMU targets,
@@ -330,6 +332,9 @@ once the core kernel stands:
   conditions, pre-MMU sequence, trampoline tables, MMU enable, runtime
   setup, TTBR0 teardown, invariants per stage
 - [`docs/IDEA.md`](docs/IDEA.md) — layered architecture preon is built toward
+- [`docs/LINUX_ABI.md`](docs/LINUX_ABI.md) — running Linux binaries: native
+  file access via bound namespaces, and the kernel behaviours the ABI server
+  must fake
 - [`docs/IPC.md`](docs/IPC.md) — IPC design notes (placeholder)
 - [`docs/VERIFICATION.md`](docs/VERIFICATION.md) — Kani model-checking: scope,
   what's provable vs out of reach, how to run, harness inventory
