@@ -324,13 +324,19 @@ _start:
     msr     sctlr_el1, x0
     isb
 
-    // Move SP off the PA stack onto the upper-half VA stack. Until now SP
-    // pointed at __stack_top_pa (set before the MMU came up); that low address
-    // resolves through TTBR0's single 2 MiB identity RAM block, and the stack
-    // extends past it, so the first post-MMU push faulted (DataAbort, same EL).
-    // The image VA stack is backed by the 1 GiB image block, so it is fully
-    // mapped — re-point SP there before the next access. TODO! confirm the exact
-    // fault address; this is the reasoned cause, not yet traced end-to-end.
+    // Rebase SP from the low boot stack (__stack_top_pa) onto the upper-half
+    // image VA stack (__stack_top) — the same physical page, but reached
+    // through TTBR1 instead of TTBR0's identity alias.
+    //
+    // AI SUMMARY: this is the prerequisite for kmain's later disable_ttbr0()
+    // (see kernel_mm::mmu, whose # Safety demands exactly this). The stack is
+    // mapped right now, so nothing faults here. But disable_ttbr0() sets
+    // TCR_EL1.EPD0 and zeroes TTBR0, retiring the low half; an SP still aimed
+    // at the low stack would then fault on the next push/return (DataAbort,
+    // same EL). Moving SP into the TTBR1-backed image region now makes the
+    // stack outlive that teardown. Traced: release-dev __stack_top_pa =
+    // 0x401f_1000, inside the 2 MiB identity block, so the abort the original
+    // note hit was deferred to disable_ttbr0 — not raised at this instruction.
     ldr     x9, =__stack_top
     mov     sp, x9
 
