@@ -48,6 +48,44 @@ virtual-address regions:
 See [`docs/BOOT_CONTRACT.md`](docs/BOOT_CONTRACT.md) for the full bring-up
 sequence and the invariants each stage establishes.
 
+## The bet — hand-build the core, port the world with AI
+
+Every from-scratch OS dies the same way: it boots, and then nobody uses it,
+because it has no drivers and no software. Writing all of that by hand
+isn't a plan — it's several lifetimes, and not one person's.
+
+So preon doesn't try. Only two things are written by hand: **the kernel**
+and **Vanguard**, the init process. Everything above that is *ported*, not
+authored, by two AI frameworks built for the job:
+
+- **Driver Porting ToolKit** — ingests open-source drivers from other
+  kernels (Linux and FreeBSD first), reads their register maps and DMA
+  setup, and rewrites them as sandboxed preon userspace drivers.
+- **Software Porting ToolKit** — helps developers see where preon differs
+  from a classic OS and port applications accordingly — either keeping
+  cross-OS compatibility or targeting preon natively.
+
+Using AI here isn't a gimmick; it's the only sane answer to a volume of
+work no individual could ever do by hand. The leverage *is* the strategy.
+
+And it's safe **because of** the microkernel design, not despite the AI.
+Every driver, every server, every ported program runs in **userspace** — a
+sloppy or even malicious port cannot reach the kernel. When ported code
+faults, the kernel contains it and restarts the service; the system stays
+up. Capabilities make that airtight: nothing holds authority it wasn't
+explicitly handed.
+
+The goal is blunt — **out-build the incumbents as a single developer** and
+move the world onto a modern, flexible OS:
+
+- **For developers and enthusiasts** — you can change literally anything
+  in the system *except* the memory manager, the scheduler, and the IPC
+  core (plus a couple of small pieces). Everything else is userspace and
+  yours to replace.
+- **For everyone else** — reliability you can feel: a tiny, hardened kernel
+  plus capability isolation means a misbehaving driver or app degrades one
+  service, never the whole machine.
+
 ## Build & run
 
 The only host requirement is [Nix](https://nixos.org/download) with
