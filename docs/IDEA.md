@@ -4,6 +4,14 @@ Preon is a microkernel. The TCB is small, drivers live in userspace,
 authority is granted through capabilities. Everything else is built
 on top of these three commitments.
 
+The ambition is a full operating system on that base — one that runs
+**everywhere** (server, desktop, embedded, reaching toward
+microcontrollers), **across architectures** (ARM64 today; ARM32, x86-64,
+RISC-V through a HAL), stays secure by treating **verification as a
+design driver** rather than an afterthought, and runs **foreign software**
+(Linux binaries) through userspace ABI-personality servers without any of
+it leaking into the privileged core.
+
 This document describes what preon is trying to be, why, and what it
 explicitly is not. For the boot contract see
 [`BOOT_CONTRACT.md`](BOOT_CONTRACT.md); for the implementation roadmap see
@@ -52,22 +60,49 @@ Preon aims to run real software, not to illustrate concepts:
 - Disk-backed file systems via userspace `virtio-blk` server
 - Network via userspace `virtio-net` server + TCP/IP stack
 
-### One ABI: native capabilities
+### One kernel ABI, many userspace personalities
 
-Preon exposes a single ABI — a thin shim over seL4-style syscalls.
-Programs target the kernel's small, capability-based syscall table
-through a userspace runtime that wraps the raw calls. The kernel itself
-knows nothing about POSIX or any foreign convention.
+The kernel exposes a single ABI — a thin shim over seL4-style capability
+syscalls. It knows nothing about POSIX or any foreign convention.
+
+Foreign ABIs live *outside* the kernel as **personality servers**. A
+process is tagged with a personality (native, Linux, …); its syscalls are
+shifted and routed over IPC to the matching server, and a userspace
+**Linux ABI server** translates Linux syscalls into preon capability
+operations. Compatibility is bought with IPC, not with kernel bloat: the
+privileged core stays capability-native no matter how many personalities
+run above it (the classic microkernel move — L4Linux, NT subsystems).
+
+### The pillars, explicitly
+
+- **Ubiquity** — one kernel from servers to embedded, MMU tiers first.
+- **Multi-arch via a thin HAL** — ARM64 → ARM32, x86-64, RISC-V.
+- **Verification-first** — model-check the logic cores as they land.
+- **ABI personalities** — Linux (and more) via userspace servers over IPC.
+- **Heterogeneous scheduling** — P/E-core aware, hint-driven placement.
+- **KASLR** — the kernel image is slide-relocatable (the `image_va_base`
+  seam already exists) so its layout isn't a fixed target.
 
 ---
 
 ## Architecture layers
 
+### Layer 0 — Hardware Abstraction Layer
+
+The one place the ISA and platform show through: page tables, exception
+entry, per-CPU registers, timers, the boot contract. A narrow HAL keeps
+the layers above architecture-agnostic. ARM64 is the first backend;
+ARM32, x86-64, and RISC-V slot in here. A thin HAL is also what keeps the
+verified core portable — the model-checked logic doesn't move when the
+backend does.
+
 ### Layer 1 — Microkernel TCB
 
 What lives inside the privileged boundary:
 
-- **Scheduler** — preemptive, per-CPU run queues
+- **Scheduler** — preemptive, per-CPU run queues; heterogeneous-core aware
+  (P/E cores) with a flexible priority/hint mechanism, so userspace can
+  steer placement without scheduling *policy* living in the kernel
 - **MMU manager** — page tables, address spaces, page-fault routing
 - **IPC engine** — synchronous send / receive / call, endpoints,
   notifications
@@ -125,10 +160,13 @@ evolve without touching the kernel.
 - **Not a Unix.** No POSIX in the kernel. No global FS namespace. No
   ambient `uid`. Foreign conventions, if ever wanted, stay entirely in
   userspace and never leak into the kernel.
-- **Not formally verified** (yet). The architecture is verifiable in
-  principle, but proof work is its own multi-year project. We aim for
-  a small enough TCB that proof becomes plausible later — not for
-  proof itself.
+- **Not a single whole-kernel proof — but verification-first.** We don't
+  claim a full-kernel proof (that is seL4's decade-long achievement).
+  Verification is instead a *design driver*: pure logic cores —
+  allocators, page-table and fault decoding, address arithmetic — are
+  model-checked with Kani as they are written, and the TCB is kept small
+  enough that deeper proof stays plausible. Correctness is engineered in,
+  not bolted on.
 - **Not a research kernel.** Every feature must justify its existence
   against the goal of running real software with a small TCB. Cool
   ideas that don't serve that goal get deferred or dropped.
@@ -136,9 +174,13 @@ evolve without touching the kernel.
   We aim for that tax to be small (Linux-comparable on most
   workloads, worse on extremely syscall-heavy ones) but we don't
   pretend it's zero.
-- **Not portable to everything.** AArch64 first. Other architectures
-  may come, but the design assumes a modern MMU + capability-friendly
-  hardware. 32-bit, segmented architectures, etc., are out of scope.
+- **Not tied to one architecture.** ARM64 is the first target, but
+  multi-arch is a goal, not an afterthought: ARM32, x86-64, and RISC-V
+  are meant to arrive through the HAL (Layer 0). The design assumes memory
+  protection — an MMU on the server/desktop/embedded tiers; the deep
+  microcontroller tier (MPU-only, no MMU) is a longer-term aspiration with
+  a necessarily different protection model. Segmented architectures stay
+  out of scope.
 
 ---
 
@@ -176,7 +218,9 @@ questions we ask:
 ## Current status
 
 See [`../README.md`](../README.md) for the phase-by-phase roadmap and
-what's been built so far. As of this writing, preon boots on QEMU
-virt, runs in the upper half via TTBR1 with separated linear/image
-regions, and enforces per-section permissions (.text RO+X,
-.rodata RO+NX, .data/.bss/.stack RW+NX). No userspace yet.
+what's been built so far. As of this writing, preon boots on QEMU virt,
+runs in the upper half via TTBR1 with separated linear/image regions and
+per-section permissions, has a **Kani-verified physical allocator stack**
+(buddy + memblock-style bootmem + slab `#[global_allocator]`), and brings
+up **all secondary CPUs (SMP)** in the upper half via a per-CPU MMU
+trampoline. No userspace yet — the capability/IPC layer is next.

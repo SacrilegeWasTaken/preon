@@ -95,6 +95,12 @@ further makes sense until its prerequisites are in place. See
 [`docs/IDEA.md`](docs/IDEA.md) for the layered architecture the kernel
 is built toward.
 
+The north star behind the phases: a **verification-first** microkernel
+that runs **everywhere** (server → embedded), **across architectures** via
+a HAL, and hosts **foreign software** (Linux) through userspace
+ABI-personality servers. The near-term phases build the core that makes
+that possible.
+
 ### Phase 0 — Bring-up
 
 - [x] Freestanding `no_std` / `no_main` binary, custom target `aarch64-unknown-none`
@@ -204,11 +210,15 @@ and it resumes in the kernel's virtual address space. Confirmed on
 - [ ] Context switch (full GP + SIMD save/restore)
 - [ ] Round-robin scheduler, preemption on timer tick
 - [ ] Per-CPU run queues, work-stealing later
+- [ ] Heterogeneous-core (P/E) awareness + a flexible priority/hint API so
+      userspace steers placement — scheduling *policy* stays out of the kernel
 - [ ] Sleep / wakeup primitives, condition variables
 
 ### Phase 7 — Userspace
 
 - [ ] EL0 transition: `SPSR_EL1.M = 0`, separate user / kernel stacks
+- [ ] KASLR — randomize the kernel image slide (the `image_va_base` seam
+      is already in place for it)
 - [ ] Per-process address spaces (separate `TTBR0_EL1` per task)
 - [ ] ELF loader, copy-on-write fork
 - [ ] System-call entry via `svc`, narrow syscall table (seL4-inspired)
@@ -236,6 +246,22 @@ and it resumes in the kernel's virtual address space. Confirmed on
 - [ ] Shell process as the first interactive userspace program
 - [ ] Power management: `wfi`-driven idle, suspend / resume
 - [ ] Documentation: IPC ABI, capability model, syscall reference
+
+### Beyond the phases — the long horizon
+
+Vision-level work from [`docs/IDEA.md`](docs/IDEA.md), sequenced loosely
+once the core kernel stands:
+
+- **Multi-arch via the HAL** — factor the ARM64-specific bits (Layer 0)
+  behind a narrow interface, then bring up a second backend (RISC-V or
+  x86-64), then ARM32
+- **ABI personalities** — a userspace Linux ABI server; a process tagged
+  with a personality has its syscalls shifted and routed to it over IPC,
+  so Linux binaries run without any of it leaking into the kernel
+- **Deeper verification** — grow the Kani-checked surface as subsystems
+  land; keep the TCB small enough that whole-subsystem proofs stay plausible
+- **The microcontroller tier** — MPU-based protection for no-MMU targets,
+  a different and later protection model
 
 ## Further reading
 
