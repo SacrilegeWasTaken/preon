@@ -1,5 +1,5 @@
 {
-  description = "exos - bare-metal microkernel for aarch64";
+  description = "preon - bare-metal microkernel for aarch64";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -44,12 +44,12 @@
         # Dev image carries debug-assertions + overflow-checks (see the
         # release-dev profile in Cargo.toml); release is the clean image.
         buildDev = mkBuild {
-          name = "exos-build";
+          name = "preon-build";
           cargoFlag = "--profile release-dev";
           subdir = "release-dev";
         };
         buildRelease = mkBuild {
-          name = "exos-build-release";
+          name = "preon-build-release";
           cargoFlag = "--release";
           subdir = "release";
         };
@@ -65,11 +65,11 @@
               -nographic -kernel build/Image "$@"
           '';
 
-        runDev = mkRun { name = "exos-run"; build = buildDev; };
-        runRelease = mkRun { name = "exos-run-release"; build = buildRelease; };
+        runDev = mkRun { name = "preon-run"; build = buildDev; };
+        runRelease = mkRun { name = "preon-run-release"; build = buildRelease; };
 
         # `cargo clean` plus removing the raw image.
-        cleanAll = pkgs.writeShellScriptBin "exos-clean" ''
+        cleanAll = pkgs.writeShellScriptBin "preon-clean" ''
           set -euo pipefail
           export PATH="${rustToolchain}/bin:$PATH"
           cargo clean
@@ -84,7 +84,7 @@
           ];
 
           shellHook = ''
-            echo "exos dev shell"
+            echo "preon dev shell"
             echo "  rustc:        $(rustc --version)"
             echo "  llvm-objcopy: $(llvm-objcopy --version | head -1)"
             echo "  qemu:         $(qemu-system-aarch64 --version | head -1)"

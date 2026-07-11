@@ -1,12 +1,13 @@
 # toolchain
 
-Everything used to build code **for** ExOS, as opposed to the OS itself.
+Everything used to build code **for** unnamed (the OS has no proper name
+yet — the kernel is `preon`), as opposed to the OS itself.
 
 ## Layout
 
 - `target/` — rustc/LLVM target specification JSON files. The kernel is
   built for `aarch64-unknown-none` (a stock target); userspace processes
-  will be built for `aarch64-unknown-exos`, a custom target spec living
+  will be built for `aarch64-unknown-unnamed`, a custom target spec living
   here. The JSON tells rustc and LLVM the data layout, linker flavor,
   panic strategy, atomic widths, and any pre/post-link arguments.
 
@@ -19,7 +20,7 @@ Everything used to build code **for** ExOS, as opposed to the OS itself.
 ## Not in scope
 
 - A C compiler. We use upstream `clang` if and when we need to compile
-  C for ExOS — there is no plan to write our own front end.
+  C for unnamed — there is no plan to write our own front end.
 - Forking LLVM. The custom target spec is the only LLVM-side artifact;
   it slots into stock `rustc`.
 

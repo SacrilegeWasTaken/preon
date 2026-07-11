@@ -1,6 +1,6 @@
 #![no_std]
 
-// Placeholder for the ExOS userspace runtime — the equivalent of a libc
+// Placeholder for the unnamed userspace runtime — the equivalent of a libc
 // for processes running on top of the kernel.
 //
 // Eventually provides:
@@ -15,5 +15,5 @@
 //   - Compiler-required intrinsics (`memcpy`, `memset`, `memmove`) when
 //     LLVM lowers Rust operations to them and we have no libc.
 //
-// Linked in by every ExOS userspace binary via a small target spec
-// (`toolchain/target/aarch64-unknown-exos.json`).
+// Linked in by every unnamed userspace binary via a small target spec
+// (`toolchain/target/aarch64-unknown-unnamed.json`).
