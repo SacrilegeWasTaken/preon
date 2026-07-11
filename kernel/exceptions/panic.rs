@@ -1,3 +1,5 @@
+//! Panic reporting — dumps live CPU context to the emergency UART.
+
 use kernel_arch::mm::VirtAddr;
 use kernel_arch::read_sysreg;
 use kernel_arch::reg::{Esr, Spsr};

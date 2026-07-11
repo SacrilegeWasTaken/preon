@@ -1,3 +1,5 @@
+//! RAM discovery — iterate the `memory` nodes of the flattened device tree.
+
 use fdt::Fdt;
 use kernel_arch::mm::PhysAddr;
 

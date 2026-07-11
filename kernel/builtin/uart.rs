@@ -80,6 +80,12 @@ pub const UART_DMACR: Reg<u32, ReadWrite> = unsafe { Reg::new(UART_BASE + 0x048)
  *
  */
 
+/*
+ *
+ *  MMIO registers
+ *
+ */
+
 /// Boilerplate for a newtype that holds a bit-set over `u32`. Each
 /// invocation declares the type, its associated constants, and the
 /// standard `BitOr` / `BitAnd` / `contains` helpers.
@@ -240,6 +246,12 @@ bitflags_u32! {
  *
  */
 
+/*
+ *
+ *  UART writers
+ *
+ */
+
 /// Zero-sized handle for direct, lock-free MMIO writes. Used by panic
 /// and exception paths where taking the lock could deadlock.
 pub struct UartRaw;
@@ -278,7 +290,7 @@ pub static UART: SpinLock<UartDriver> = SpinLock::new(UartDriver { raw: UartRaw 
 
 /*
  *
- * PRINT MACROS
+ *  Logging macros
  *
  */
 

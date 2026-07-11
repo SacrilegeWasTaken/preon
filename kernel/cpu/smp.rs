@@ -1,3 +1,8 @@
+//! SMP bring-up: the primary walks the device tree, sizes a per-CPU stack and
+//! control block for each secondary, and starts them through PSCI. Secondaries
+//! land in the assembler trampoline, install their per-CPU `TPIDR_EL1`, and
+//! report in via [`Smp::mark_online`].
+
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -13,6 +18,12 @@ use crate::types::{CpuId, Mpidr};
 
 pub(crate) use kernel_arch::MAX_CPUS;
 pub const STACK_SIZE: usize = 64 * 1024;
+
+/*
+ *
+ *  Types
+ *
+ */
 
 /// Per-CPU control block. Itself a `.percpu` static, so each CPU reaches its
 /// own copy through the per-CPU offset in `TPIDR_EL1` (see
@@ -48,6 +59,12 @@ pub struct SecondaryBootData {
 struct BootDataCell(UnsafeCell<SecondaryBootData>);
 unsafe impl Sync for BootDataCell {}
 
+/*
+ *
+ *  Module state
+ *
+ */
+
 /// Bitmap. Will be explained later (or deleted)
 /// # Deletion reason:
 /// The whole SMP setup is very inefficient for 32+
@@ -78,6 +95,12 @@ static BOOT_DATA: [BootDataCell; MAX_CPUS] = [const {
 unsafe extern "C" {
     fn secondary_entry();
 }
+
+/*
+ *
+ *  SMP driver
+ *
+ */
 
 /// Errors that can stop SMP bring-up.
 #[derive(Debug)]
@@ -206,6 +229,12 @@ impl Smp {
     }
 }
 
+/*
+ *
+ *  Secondary entry points
+ *
+ */
+
 /// Install the per-CPU area offset in `TPIDR_EL1`.
 ///
 /// Called from `secondary.asm` on every secondary right after its stack
@@ -232,8 +261,14 @@ extern "C" fn secondary_cpu_main(_boot_data: &SecondaryBootData) -> ! {
     wfe_loop!()
 }
 
+/*
+ *
+ *  Helpers
+ *
+ */
+
 /// Clean [va, va+len) to the Point of Coherency so a secondary reading it with
-/// the MMU off (non-cacheable) sees the primary's cacheable writes. :wa
+/// the MMU off (non-cacheable) sees the primary's cacheable writes.
 fn clean_dcache(va: usize, len: usize) {
     const LINE: usize = 64; // over-clean on 128-B lines is fine
     let mut p = va & !(LINE - 1);

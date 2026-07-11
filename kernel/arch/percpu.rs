@@ -11,7 +11,18 @@
 //! from [`OFFSETS`]) — needed to fill a CPU's data *before* it installs
 //! its own `TPIDR_EL1`.
 
+use core::{
+    cell::UnsafeCell,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+
 use crate::{MAX_CPUS, read_sysreg, write_sysreg};
+
+/*
+ *
+ *  TPIDR_EL1 access
+ *
+ */
 
 /// Read the calling CPU's per-CPU area offset from `TPIDR_EL1`.
 pub fn this_cpu_offset() -> usize {
@@ -23,6 +34,12 @@ pub fn this_cpu_offset() -> usize {
 pub unsafe fn set_this_cpu_offset(offset: usize) {
     write_sysreg!(tpidr_el1, offset as u64);
 }
+
+/*
+ *
+ *  Per-CPU pointer macros
+ *
+ */
 
 /// Pointer to CPU `$cpu`'s copy of the `.percpu` static `$var`.
 ///
@@ -47,10 +64,11 @@ macro_rules! this_cpu_ptr {
     };
 }
 
-use core::{
-    cell::UnsafeCell,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+/*
+ *
+ *  Per-CPU area storage
+ *
+ */
 
 /// Each CPU's per-CPU area offset, indexed by CPU id. Published by [`init`].
 static OFFSETS: [AtomicUsize; MAX_CPUS] = [const { AtomicUsize::new(0) }; MAX_CPUS];
@@ -71,8 +89,15 @@ const PERCPU_MAX: usize = 4096;
 #[repr(C)]
 struct Area(UnsafeCell<[u8; PERCPU_MAX]>);
 unsafe impl Sync for Area {}
+
 /// Backing storage for every CPU's per-CPU area.
 static AREAS: [Area; MAX_CPUS] = [const { Area(UnsafeCell::new([0; PERCPU_MAX])) }; MAX_CPUS];
+
+/*
+ *
+ *  Init & queries
+ *
+ */
 
 /// Compute every CPU's area offset and install the primary's in `TPIDR_EL1`.
 pub fn init() {

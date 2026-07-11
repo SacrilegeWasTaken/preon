@@ -1,3 +1,4 @@
+//! `kernel_cpu` — SMP bring-up, the PSCI client, and per-CPU identity types.
 #![no_std]
 
 use core::arch::global_asm;

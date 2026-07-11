@@ -20,6 +20,12 @@ const _: () = assert!(align_of::<PageInfo>() == 4);
 
 const RAW_NONE: u32 = u32::MAX;
 
+/*
+ *
+ *  Page descriptor (mem-map)
+ *
+ */
+
 #[repr(C)]
 struct PageInfo {
     next: u32,
@@ -124,6 +130,12 @@ enum PageState {
 }
 
 const MAX_ORDER: usize = 11;
+
+/*
+ *
+ *  Buddy allocator
+ *
+ */
 
 /// The global buddy allocator, installed once by `kmain` after hand-off.
 /// `get()` is `None` until then — callers (e.g. `frame::alloc_page`) fall back

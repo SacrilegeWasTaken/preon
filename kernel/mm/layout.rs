@@ -1,8 +1,5 @@
-/*
-*
-*   Kernel address-space layout
-*
-*/
+//! Kernel address-space layout — the linear map, the image region, and the
+//! physical ↔ virtual conversions built on the `image_va_base` seam.
 
 use kernel_arch::mm::{PhysAddr, VirtAddr};
 
@@ -69,14 +66,14 @@ fn image_va_base() -> usize {
 }
 
 /*
-*
-*   Formal verification (Kani model-checking harnesses)
-*
-*   Compiled only under `cargo kani`. Pure address arithmetic — round-trips
-*   and window-containment for the linear / image / device maps. Invisible to
-*   a normal kernel build because the whole module is `#[cfg(kani)]`.
-*
-*/
+ *
+ *  Formal verification (Kani model-checking harnesses)
+ *
+ *  Compiled only under `cargo kani`. Pure address arithmetic — round-trips
+ *  and window-containment for the linear / image / device maps. Invisible to
+ *  a normal kernel build because the whole module is `#[cfg(kani)]`.
+ *
+ */
 
 #[cfg(kani)]
 mod verification {

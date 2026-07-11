@@ -24,10 +24,10 @@ use crate::attrs::MemoryAttr;
 use crate::types::{FrameAllocator, Shareability};
 
 /*
-*
-* Type bits (bits 0:1)
-*
-*/
+ *
+ *  Type bits (bits 0:1)
+ *
+ */
 
 /// Bit 0 — the entry is in use. A zero here means MMU treats the entry
 /// as invalid regardless of the other bits.
@@ -92,6 +92,12 @@ pub const PXN: u64 = 1 << 53;
 pub const UXN: u64 = 1 << 54;
 
 // Typed parameters
+
+/*
+ *
+ *  Permissions & attributes
+ *
+ */
 
 /// Access permissions for a leaf entry (block or page). Names describe
 /// the policy ("who can do what") rather than encoding raw AP bits.
@@ -165,7 +171,11 @@ impl LeafAttrs {
     }
 }
 
-// Entry type
+/*
+ *
+ *  Page-table entry
+ *
+ */
 
 /// One page-table entry.
 ///
@@ -323,14 +333,14 @@ impl PageTable {
 }
 
 /*
-*
-* Formal verification (Kani model-checking harnesses)
-*
-* Compiled only under `cargo kani`. Descriptor encoding is pure bit math, so
-* CBMC covers every input: round-trip of the output address and the type-bit
-* predicates the walker branches on.
-*
-*/
+ *
+ *  Formal verification (Kani model-checking harnesses)
+ *
+ *  Compiled only under `cargo kani`. Descriptor encoding is pure bit math, so
+ *  CBMC covers every input: round-trip of the output address and the type-bit
+ *  predicates the walker branches on.
+ *
+ */
 
 #[cfg(kani)]
 mod verification {

@@ -33,6 +33,12 @@ impl Region {
 
 const NR_REGIONS: usize = 128;
 
+/*
+ *
+ *  Interval allocator
+ *
+ */
+
 /// Fixed-capacity `memory` / `reserved` interval lists. `reserved` is kept
 /// sorted by base so [`BootMem::for_each_free`]'s carve is a single pass.
 pub struct BootMem {

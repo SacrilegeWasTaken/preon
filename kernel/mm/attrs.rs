@@ -1,3 +1,6 @@
+//! Memory attribute slots (`MAIR_EL1`) and the typed [`MemoryAttr`] selector
+//! that page-table builders use instead of raw slot indices.
+
 use kernel_arch::{flush_cpu_pipeline, write_sysreg};
 
 /// Memory attribute slot selector used inside page-table entries.

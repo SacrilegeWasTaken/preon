@@ -1,3 +1,5 @@
+//! `kernel_mm` — physical and virtual memory: the allocator stack (bootmem,
+//! buddy, slab), page tables, and the kernel address-space layout.
 #![no_std]
 
 pub mod attrs;

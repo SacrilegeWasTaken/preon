@@ -1,3 +1,6 @@
+//! Typed decoders for the aarch64 system registers read at exception entry:
+//! [`Spsr`], [`Esr`], and the data-fault status code [`Dfsc`].
+
 use crate::exceptions::{ExceptionClass, FaultStatus};
 use crate::read_sysreg;
 

@@ -1,3 +1,6 @@
+//! PSCI client — firmware power calls used to switch on secondary CPUs during
+//! SMP bring-up. Conduit (`HVC`/`SMC`) is discovered from the device tree.
+
 use fdt::Fdt;
 use kernel_arch::mm::PhysAddr;
 

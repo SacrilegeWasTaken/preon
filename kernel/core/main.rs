@@ -1,3 +1,9 @@
+//! Kernel entry point and early-boot orchestration.
+//!
+//! [`kmain`] runs after the assembly boot stub (`asm/boot.s`) has dropped to
+//! EL1 and set up a stack. It parses the device tree, builds the page tables
+//! and switches to the upper half, brings the physical allocators online,
+//! starts the secondary CPUs, and reclaims the boot trampoline — then parks.
 #![no_std]
 #![no_main]
 
@@ -29,6 +35,12 @@ unsafe extern "C" {
     static __boot_bss_start: u8;
     static __boot_bss_end: u8;
 }
+
+/*
+ *
+ *  Entry
+ *
+ */
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain(dtb: usize) -> ! {
@@ -72,6 +84,14 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
     wfe_loop!();
 }
 
+/*
+ *
+ *  Boot-time setup
+ *
+ */
+
+/// Build the boot-time memblock allocator from the FDT: register every RAM
+/// region, then reserve the kernel image and the DTB so they survive hand-off.
 fn build_bootmem(fdt: &Fdt, dtb: usize) -> BootMem {
     let mut boot = BootMem::new();
 
@@ -89,6 +109,8 @@ fn build_bootmem(fdt: &Fdt, dtb: usize) -> BootMem {
     boot
 }
 
+/// Hand memory from bootmem to a fresh buddy allocator: size and place the
+/// mem-map over the RAM span, then free every non-reserved frame into it.
 fn init_buddy(mut boot: BootMem) -> BuddyAllocator {
     let (base_pfn, nr_frames) = boot.ram_span();
     let dram_base = PhysAddr::new(base_pfn.index() * PAGE_SIZE);
@@ -100,19 +122,20 @@ fn init_buddy(mut boot: BootMem) -> BuddyAllocator {
     let mut buddy = unsafe { BuddyAllocator::new_at(mm_pa, dram_base, nr_frames) };
 
     boot.for_each_free(|h| {
-        let pfn = buddy.pfn_of(PhysAddr::new(h.base.index() * PAGE_SIZE)); // абс → relative
+        let pfn = buddy.pfn_of(PhysAddr::new(h.base.index() * PAGE_SIZE)); // absolute → relative
         buddy.free_range(pfn, h.frames);
     });
 
     buddy
 }
 
+/// Parse the flattened device tree at `dtb`; panics if the blob is malformed.
 fn parse_fdt(dtb: usize) -> fdt::Fdt<'static> {
     unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }.expect("DTB error. Check QEMU conf.")
 }
 
 /// # Safety
-/// Caller guarantees to call it obly once and only right after buddy allocator was created
+/// Caller guarantees to call it only once, right after the buddy allocator is created.
 unsafe fn reclaim_trampoline() {
     let mut buddy = unsafe { BUDDY.get().unwrap_unchecked().lock() };
     let bb_start = &raw const __boot_bss_start as usize;
@@ -123,6 +146,12 @@ unsafe fn reclaim_trampoline() {
     buddy.free_range(a, FrameCount::new(bb_pages));
     kernel_log!("reclaimed {} trampoline pages", bb_pages);
 }
+
+/*
+ *
+ *  Panic
+ *
+ */
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {

@@ -1,3 +1,6 @@
+//! Exception-class ([`ExceptionClass`]) and fault-status decoding from
+//! `ESR_EL1`.
+
 use crate::mm::Level;
 use crate::reg::{Dfsc, Esr};
 

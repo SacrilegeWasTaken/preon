@@ -1,3 +1,5 @@
+//! Core CPU identity types: the logical [`CpuId`] and the hardware [`Mpidr`].
+
 /// Logical CPU index, used to address per-CPU arrays (stacks, data, boot info).
 ///
 /// `CpuId::PRIMARY` is reserved for the boot CPU. Secondary CPUs are

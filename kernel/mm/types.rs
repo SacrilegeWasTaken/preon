@@ -1,6 +1,13 @@
-//! General types for MMU control
+//! General value types for the memory subsystem: MMU control encodings and
+//! the physical allocator's frame/order newtypes.
 
 use kernel_arch::mm::PhysAddr;
+
+/*
+ *
+ *  MMU control encodings
+ *
+ */
 
 /// Cache-coherence domain of the mapped region.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

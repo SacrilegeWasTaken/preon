@@ -1,3 +1,6 @@
+//! The [`TrapFrame`] — the CPU register snapshot saved at exception entry and
+//! restored on `eret`.
+
 use kernel_arch::mm::VirtAddr;
 use kernel_arch::read_sysreg;
 use kernel_arch::reg::{Esr, Spsr};

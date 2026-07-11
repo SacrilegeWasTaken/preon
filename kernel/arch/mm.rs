@@ -1,3 +1,6 @@
+//! Address and page-table primitives for aarch64: the [`PhysAddr`] /
+//! [`VirtAddr`] newtypes and the translation [`Level`].
+
 /// Physical address. A thin wrapper around `usize` to keep physical and
 /// virtual addresses from being mixed up at call sites.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
