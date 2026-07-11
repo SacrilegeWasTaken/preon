@@ -282,16 +282,19 @@ pub static UART: SpinLock<UartDriver> = SpinLock::new(UartDriver { raw: UartRaw 
  *
  */
 
+/// Serialized log line through the UART `SpinLock`. Default logging path.
 #[macro_export]
-macro_rules! kernel_uart_log {
+macro_rules! kernel_log {
     ($($arg:tt)*) => {{
         use core::fmt::Write as _;
         let _ = writeln!($crate::uart::UART.lock(), $($arg)*);
     }};
 }
 
+/// Unlocked log line straight to the UART MMIO. For contexts where taking the
+/// lock is unsafe or deadlock-prone: panic, exception dumps, early boot.
 #[macro_export]
-macro_rules! kernel_uart_direct_log {
+macro_rules! kernel_log_raw {
     ($($arg:tt)*) => {{
         use core::fmt::Write as _;
         let _ = writeln!($crate::uart::UartRaw, $($arg)*);

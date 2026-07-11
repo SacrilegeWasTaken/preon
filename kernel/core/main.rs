@@ -10,13 +10,14 @@ use kernel_arch::{
     mm::{PhysAddr, VirtAddr},
     wfe_loop,
 };
-use kernel_builtin::{kernel_uart_direct_log, kernel_uart_log, sync::SpinLock};
+use kernel_builtin::{kernel_log, sync::SpinLock};
 use kernel_exceptions::ExceptionVectors;
 use kernel_mm::{
     bootmem::BootMem,
     buddy::{BUDDY, BuddyAllocator},
     frame::PAGE_SIZE,
     layout::{PHYS_LOAD_BASE, linear_va_to_pa},
+    types::FrameCount,
 };
 
 // Boot stub: drop EL2 -> EL1, enable FP/SIMD, set the kernel stack,
@@ -32,23 +33,23 @@ unsafe extern "C" {
 #[unsafe(no_mangle)]
 pub extern "C" fn kmain(dtb: usize) -> ! {
     ExceptionVectors::install();
-    kernel_uart_log!("Hello from ExOS!");
+    kernel_log!("Hello from Preon kernel!");
 
     kernel_arch::percpu::init();
 
     let fdt = parse_fdt(dtb);
     let root = kernel_mm::kernel_map::build(&fdt);
-    kernel_uart_log!("kernel_map built, root at 0x{:x}", root.as_usize());
+    kernel_log!("kernel_map built, root at 0x{:x}", root.as_usize());
 
     unsafe { kernel_mm::mmu::switch_ttbr1(root) };
-    kernel_uart_log!("TTBR1 switched");
+    kernel_log!("TTBR1 switched");
 
     unsafe { kernel_mm::mmu::disable_ttbr0() };
-    kernel_uart_log!("TTBR0 disabled");
+    kernel_log!("TTBR0 disabled");
 
     let boot = build_bootmem(&fdt, dtb);
     let buddy = init_buddy(boot);
-    kernel_uart_log!("buddy up: {} free frames", buddy.free_frames());
+    kernel_log!("buddy up: {} free frames", buddy.free_frames().get());
     BUDDY.call_once(|| SpinLock::new(buddy));
 
     let psci = kernel_cpu::psci::Psci::from_fdt(&fdt).expect("no /psci node");
@@ -58,14 +59,14 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
 
     let p1 = kernel_mm::frame::alloc_page();
     let p2 = kernel_mm::frame::alloc_page();
-    kernel_uart_direct_log!("buddy alloc: {:#x}, {:#x}", p1.as_usize(), p2.as_usize());
+    kernel_log!("buddy alloc: {:#x}, {:#x}", p1.as_usize(), p2.as_usize());
 
     let v = alloc::vec![1u32, 2, 3, 4];
-    kernel_uart_direct_log!("vec len={} @ {:p}", v.len(), v.as_ptr());
+    kernel_log!("vec len={} @ {:p}", v.len(), v.as_ptr());
     let b = alloc::boxed::Box::new(0xDEADBEEFu64);
-    kernel_uart_direct_log!("box {:#x} @ {:p}", *b, core::ptr::addr_of!(*b));
+    kernel_log!("box {:#x} @ {:p}", *b, core::ptr::addr_of!(*b));
 
-    kernel_uart_direct_log!("Triggering exception...");
+    kernel_log!("Triggering exception...");
     unsafe { core::arch::asm!("udf #0") }
 
     wfe_loop!();
@@ -90,19 +91,17 @@ fn build_bootmem(fdt: &Fdt, dtb: usize) -> BootMem {
 
 fn init_buddy(mut boot: BootMem) -> BuddyAllocator {
     let (base_pfn, nr_frames) = boot.ram_span();
-    let dram_base = PhysAddr::new(base_pfn as usize * PAGE_SIZE);
+    let dram_base = PhysAddr::new(base_pfn.index() * PAGE_SIZE);
 
     let mm_frames = BuddyAllocator::memmap_frames(nr_frames);
-    let mm_pfn = boot
-        .alloc(mm_frames as u32, 1)
-        .expect("no room for mem-map");
-    let mm_pa = PhysAddr::new(mm_pfn as usize * PAGE_SIZE);
+    let mm_pfn = boot.alloc(mm_frames, 1).expect("no room for mem-map");
+    let mm_pa = PhysAddr::new(mm_pfn.index() * PAGE_SIZE);
 
     let mut buddy = unsafe { BuddyAllocator::new_at(mm_pa, dram_base, nr_frames) };
 
     boot.for_each_free(|h| {
-        let pfn = buddy.pfn_of(PhysAddr::new(h.base as usize * PAGE_SIZE)); // абс → relative
-        buddy.free_range(pfn, h.frames as usize);
+        let pfn = buddy.pfn_of(PhysAddr::new(h.base.index() * PAGE_SIZE)); // абс → relative
+        buddy.free_range(pfn, h.frames);
     });
 
     buddy
@@ -121,8 +120,8 @@ unsafe fn reclaim_trampoline() {
     let bb_pages = (bb_end - bb_start) / PAGE_SIZE;
 
     let a = buddy.pfn_of(PhysAddr::new(bb_start));
-    buddy.free_range(a, bb_pages);
-    kernel_uart_direct_log!("reclaimed {} trampoline pages", bb_pages);
+    buddy.free_range(a, FrameCount::new(bb_pages));
+    kernel_log!("reclaimed {} trampoline pages", bb_pages);
 }
 
 #[panic_handler]

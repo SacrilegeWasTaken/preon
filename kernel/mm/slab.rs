@@ -15,7 +15,7 @@ use core::{
 use kernel_arch::mm::VirtAddr;
 use kernel_builtin::sync::SpinLock;
 
-use crate::{buddy::BUDDY, frame::PAGE_SIZE};
+use crate::{buddy::BUDDY, frame::PAGE_SIZE, types::Order};
 
 /// Size classes served from free-lists (bytes). A request rounds up to the
 /// smallest class that fits its size and alignment; larger goes to the buddy.
@@ -98,10 +98,12 @@ unsafe fn large_dealloc(ptr: *mut u8, layout: Layout) {
 }
 
 /// Buddy order covering `size` bytes: ceil_log2(ceil(size / PAGE_SIZE)).
-fn pages_order(size: usize) -> u8 {
-    size.div_ceil(PAGE_SIZE)
-        .next_power_of_two()
-        .trailing_zeros() as u8
+fn pages_order(size: usize) -> Order {
+    Order::new(
+        size.div_ceil(PAGE_SIZE)
+            .next_power_of_two()
+            .trailing_zeros() as u8,
+    )
 }
 
 /// Intrusive free-list node — lives in a freed object's own first bytes.

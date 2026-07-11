@@ -3,8 +3,9 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use kernel_arch::mm::{PhysAddr, VirtAddr};
 use kernel_arch::wfe_loop;
-use kernel_builtin::kernel_uart_log;
+use kernel_builtin::kernel_log;
 use kernel_mm::buddy::BUDDY;
+use kernel_mm::types::Order;
 use kernel_mm::layout::{image_va_to_pa, pa_to_linear_va};
 
 use crate::psci::{Psci, PsciError};
@@ -13,14 +14,13 @@ use crate::types::{CpuId, Mpidr};
 pub(crate) use kernel_arch::MAX_CPUS;
 pub const STACK_SIZE: usize = 64 * 1024;
 
-/// Per-CPU control block reached via `TPIDR_EL1`.
-///
-/// Layout matches what the assembler trampoline expects when reading
-/// the pointer published through `install_current_cpu_local`.
+/// Per-CPU control block. Itself a `.percpu` static, so each CPU reaches its
+/// own copy through the per-CPU offset in `TPIDR_EL1` (see
+/// `kernel_arch::percpu`); `install_current_cpu_local` publishes that offset.
 ///
 /// Align(128) is performance critical. It's a cacheline alignment.
-/// When CPU0 is writing `CPU_DATA[0]` -> cache coherency making
-/// the whole line CPU0 exclusive, so CPU1 losing it's copy in cache.
+/// When one CPU writes its own copy -> cache coherency making
+/// the whole line that CPU exclusive, so others lose their copy in cache.
 /// So cacheline alignment preventing ping-pong effect between CPUs.
 /// Locally data is independent. If they are physically sharing once
 /// cacheline -> every write operation is a performance hit!
@@ -28,8 +28,8 @@ pub const STACK_SIZE: usize = 64 * 1024;
 /// - Apple M1/M2/M3... has 128 byte cacheline
 /// - Cortex-A53/A57/A72/A75/A76/A77/A78/X1 - 64 bytes
 ///
-/// Align(128) is safe across platforms. The memory cost is
-/// 2KB in `.bss` section for each 16 CPUs. Nothing.
+/// Align(128) is safe across platforms. The memory cost is a little padding
+/// per CPU inside the per-CPU areas. Nothing.
 #[repr(C, align(128))]
 pub struct CpuData {
     pub cpu_id: CpuId,
@@ -206,7 +206,7 @@ impl Smp {
     }
 }
 
-/// Install the per-CPU pointer in `TPIDR_EL1`.
+/// Install the per-CPU area offset in `TPIDR_EL1`.
 ///
 /// Called from `secondary.asm` on every secondary right after its stack
 /// is set, and from `Smp::install_current` for the primary.
@@ -223,7 +223,7 @@ extern "C" fn install_current_cpu_local(offset: usize) {
 #[unsafe(no_mangle)]
 extern "C" fn secondary_cpu_main(_boot_data: &SecondaryBootData) -> ! {
     let cpu = Smp::current();
-    kernel_uart_log!(
+    kernel_log!(
         "CPU {} online (mpidr={:#x})",
         cpu.cpu_id.raw(),
         cpu.mpidr.raw()
@@ -244,7 +244,7 @@ fn clean_dcache(va: usize, len: usize) {
     unsafe { core::arch::asm!("dsb ish", options(nostack, preserves_flags)) };
 }
 
-const STACK_ORDER: u8 = 4;
+const STACK_ORDER: Order = Order::new(4);
 
 fn allock_stack() -> Option<usize> {
     let pa = BUDDY.get()?.lock().alloc_pages(STACK_ORDER)?;

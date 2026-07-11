@@ -11,7 +11,7 @@
 use kernel_arch::exceptions::ExceptionClass::{InstrAbortLowerEl, InstrAbortSameEl};
 use kernel_arch::reg::Esr;
 use kernel_arch::{read_sysreg, wfe_loop};
-use kernel_builtin::kernel_uart_direct_log;
+use kernel_builtin::kernel_log_raw;
 
 use crate::types::TrapFrame;
 
@@ -45,7 +45,7 @@ pub fn handle_page_fault(frame: &TrapFrame) {
         }
     };
     let elr = frame.elr().as_u64();
-    kernel_uart_direct_log!(
+    kernel_log_raw!(
         "=== PAGE FAULT ===\nSTATUS: {}\nLEVEL: {:?}\nACCESS: {}\nFAR: {:#018x}\nFAR_VALID: {}\nELR: {:#018x}\nESR: {:#018x}",
         status.description(),
         status.level(),

@@ -114,3 +114,75 @@ impl VirtAddrSize {
 pub trait FrameAllocator {
     fn alloc_page(&mut self) -> PhysAddr;
 }
+
+/*
+ *
+ *  Physical allocator value types
+ *
+ */
+
+/// A physical frame number — a page index into RAM (`pa / PAGE_SIZE`).
+///
+/// Backed by `u32` for memory economy: with 4 KiB pages this caps physical
+/// RAM at `2^32` frames = 16 TiB, which matches the buddy mem-map's `u32`
+/// free-list links. If future hardware needs more, widen this to `usize` and
+/// widen the `PageInfo` links together — a coordinated mem-map change.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct Pfn(u32);
+
+impl Pfn {
+    pub const fn new(raw: u32) -> Self {
+        Self(raw)
+    }
+    pub const fn raw(self) -> u32 {
+        self.0
+    }
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// A count of physical frames — distinct from a [`Pfn`], which is a position.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct FrameCount(usize);
+
+impl FrameCount {
+    pub const fn new(n: usize) -> Self {
+        Self(n)
+    }
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl core::ops::AddAssign<usize> for FrameCount {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs;
+    }
+}
+
+impl core::ops::SubAssign<usize> for FrameCount {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.0 -= rhs;
+    }
+}
+
+/// A buddy allocation order — a block spans `2^order` frames. A type tag only;
+/// the `order < MAX_ORDER` invariant stays with the allocator's `debug_assert`s.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct Order(u8);
+
+impl Order {
+    pub const fn new(raw: u8) -> Self {
+        Self(raw)
+    }
+    pub const fn raw(self) -> u8 {
+        self.0
+    }
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+}

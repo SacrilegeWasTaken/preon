@@ -1,7 +1,7 @@
 use kernel_arch::mm::VirtAddr;
 use kernel_arch::read_sysreg;
 use kernel_arch::reg::{Esr, Spsr};
-use kernel_builtin::kernel_uart_direct_log;
+use kernel_builtin::kernel_log_raw;
 
 /// Print panic context to the emergency UART.
 ///
@@ -25,22 +25,22 @@ pub fn panic_dump(info: &core::panic::PanicInfo) {
     }
     let sp = VirtAddr::new(sp);
 
-    kernel_uart_direct_log!("");
-    kernel_uart_direct_log!("=== KERNEL PANIC ===");
+    kernel_log_raw!("");
+    kernel_log_raw!("=== KERNEL PANIC ===");
     if let Some(loc) = info.location() {
-        kernel_uart_direct_log!("Location : {}:{}:{}", loc.file(), loc.line(), loc.column());
+        kernel_log_raw!("Location : {}:{}:{}", loc.file(), loc.line(), loc.column());
     }
-    kernel_uart_direct_log!("Message  : {}", info.message());
-    kernel_uart_direct_log!("MPIDR    : {:#018x}", mpidr);
-    kernel_uart_direct_log!("SP       : {:#018x}", sp);
-    kernel_uart_direct_log!(
+    kernel_log_raw!("Message  : {}", info.message());
+    kernel_log_raw!("MPIDR    : {:#018x}", mpidr);
+    kernel_log_raw!("SP       : {:#018x}", sp);
+    kernel_log_raw!(
         "ESR_EL1  : {:#018x} ({:?} / {:#04x})",
         esr.raw(),
         esr.class(),
         esr.ec_raw()
     );
-    kernel_uart_direct_log!("Reason   : {}", esr.class().description());
-    kernel_uart_direct_log!("ELR_EL1  : {:#018x}", elr);
-    kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
-    kernel_uart_direct_log!("SPSR_EL1 : {:#018x} ({:?})", spsr, spsr.mode());
+    kernel_log_raw!("Reason   : {}", esr.class().description());
+    kernel_log_raw!("ELR_EL1  : {:#018x}", elr);
+    kernel_log_raw!("FAR_EL1  : {:#018x}", far);
+    kernel_log_raw!("SPSR_EL1 : {:#018x} ({:?})", spsr, spsr.mode());
 }

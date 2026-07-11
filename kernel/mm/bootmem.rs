@@ -8,18 +8,22 @@
 //! alloc safety, byte rounding, and the RAM span — is Kani-verified.
 
 use crate::frame::PAGE_SIZE;
+use crate::types::{FrameCount, Pfn};
 
 /// A frame interval `[base, base + frames)` in absolute PFNs (`pa / PAGE_SIZE`).
 #[derive(Clone, Copy)]
 pub struct Region {
-    pub base: u32,
-    pub frames: u32,
+    pub base: Pfn,
+    pub frames: FrameCount,
 }
 
 impl Region {
-    const ZERO: Self = Self { base: 0, frames: 0 };
-    fn end(&self) -> u32 {
-        self.base + self.frames
+    const ZERO: Self = Self {
+        base: Pfn::new(0),
+        frames: FrameCount::new(0),
+    };
+    fn end(&self) -> Pfn {
+        Pfn::new((self.base.index() + self.frames.get()) as u32)
     }
 
     fn overlaps(&self, o: Region) -> bool {
@@ -51,19 +55,19 @@ impl BootMem {
 
     /// Span from the lowest RAM frame to the highest: (base pfn, frame count).
     /// The buddy mem-map covers this whole range; inter-region gaps stay Reserved.
-    pub fn ram_span(&self) -> (u32, usize) {
+    pub fn ram_span(&self) -> (Pfn, FrameCount) {
         assert!(self.n_memory > 0, "bootmem: no memory regions");
         let mut lo = u32::MAX;
-        let mut hi = 0;
+        let mut hi = 0u32;
         for m in &self.memory[..self.n_memory] {
-            lo = lo.min(m.base);
-            hi = hi.max(m.end());
+            lo = lo.min(m.base.raw());
+            hi = hi.max(m.end().raw());
         }
-        (lo, (hi - lo) as usize)
+        (Pfn::new(lo), FrameCount::new((hi - lo) as usize))
     }
 
-    fn add_memory(&mut self, base: u32, frames: u32) {
-        debug_assert!(frames >= 1);
+    fn add_memory(&mut self, base: Pfn, frames: FrameCount) {
+        debug_assert!(frames.get() >= 1);
         assert!(
             self.n_memory < NR_REGIONS,
             "bootmem: memory regions exhausted"
@@ -72,8 +76,8 @@ impl BootMem {
         self.n_memory += 1;
     }
 
-    fn reserve(&mut self, base: u32, frames: u32) {
-        debug_assert!(frames >= 1);
+    fn reserve(&mut self, base: Pfn, frames: FrameCount) {
+        debug_assert!(frames.get() >= 1);
         assert!(
             self.n_reserved < NR_REGIONS,
             "bootmem: reserved regions exhausted"
@@ -88,16 +92,16 @@ impl BootMem {
     }
 
     pub fn reserve_bytes(&mut self, base_pa: usize, end_pa: usize) {
-        let base = (base_pa / PAGE_SIZE) as u32;
-        let end = end_pa.div_ceil(PAGE_SIZE) as u32;
-        self.reserve(base, end - base);
+        let base = base_pa / PAGE_SIZE;
+        let end = end_pa.div_ceil(PAGE_SIZE);
+        self.reserve(Pfn::new(base as u32), FrameCount::new(end - base));
     }
 
     pub fn add_memory_bytes(&mut self, base_pa: usize, end_pa: usize) {
-        let base = base_pa.div_ceil(PAGE_SIZE) as u32;
-        let end = (end_pa / PAGE_SIZE) as u32;
+        let base = base_pa.div_ceil(PAGE_SIZE);
+        let end = end_pa / PAGE_SIZE;
         if end > base {
-            self.add_memory(base, end - base);
+            self.add_memory(Pfn::new(base as u32), FrameCount::new(end - base));
         }
     }
 
@@ -111,7 +115,7 @@ impl BootMem {
                 if r.base > cursor {
                     f(Region {
                         base: cursor,
-                        frames: r.base - cursor,
+                        frames: FrameCount::new(r.base.index() - cursor.index()),
                     });
                 }
                 cursor = cursor.max(r.end());
@@ -119,20 +123,22 @@ impl BootMem {
             if cursor < m.end() {
                 f(Region {
                     base: cursor,
-                    frames: m.end() - cursor,
+                    frames: FrameCount::new(m.end().index() - cursor.index()),
                 });
             }
         }
     }
 
-    pub fn alloc(&mut self, frames: u32, align: u32) -> Option<u32> {
-        debug_assert!(frames >= 1 && align >= 1);
+    pub fn alloc(&mut self, frames: FrameCount, align: u32) -> Option<Pfn> {
+        debug_assert!(frames.get() >= 1 && align >= 1);
 
-        let mut best: Option<u32> = None;
+        let mut best: Option<Pfn> = None;
         self.for_each_free(|hole| {
             if hole.frames >= frames {
-                let top = hole.end() - frames; // highest possible base in this hole
-                let cand = top - (top % align); // round DOWN to alignment
+                // highest possible base in this hole
+                let top = Pfn::new((hole.end().index() - frames.get()) as u32);
+                // round DOWN to alignment
+                let cand = Pfn::new(top.raw() - (top.raw() % align));
                 if cand >= hole.base && best.map_or(true, |b| cand > b) {
                     best = Some(cand); // keep the highest candidate
                 }
@@ -172,14 +178,23 @@ mod verification {
         let frames: u32 = kani::any();
         kani::assume(frames >= 1);
         kani::assume((base as u64) + (frames as u64) <= u32::MAX as u64);
-        Region { base, frames }
+        Region {
+            base: Pfn::new(base),
+            frames: FrameCount::new(frames as usize),
+        }
     }
 
     fn empty_bootmem() -> BootMem {
         BootMem {
-            memory: [Region { base: 0, frames: 0 }; NR_REGIONS],
+            memory: [Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(0),
+        }; NR_REGIONS],
             n_memory: 0,
-            reserved: [Region { base: 0, frames: 0 }; NR_REGIONS],
+            reserved: [Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(0),
+        }; NR_REGIONS],
             n_reserved: 0,
         }
     }
@@ -209,12 +224,21 @@ mod verification {
     #[kani::unwind(12)]
     fn for_each_free_two_holes() {
         let mut bm = empty_bootmem();
-        bm.memory[0] = Region { base: 0, frames: 8 };
+        bm.memory[0] = Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(8),
+        };
         bm.n_memory = 1;
-        bm.reserved[0] = Region { base: 2, frames: 2 }; // [2,4)
+        bm.reserved[0] = Region {
+            base: Pfn::new(2),
+            frames: FrameCount::new(2),
+        }; // [2,4)
         bm.n_reserved = 1;
 
-        let mut holes = [Region { base: 0, frames: 0 }; 4];
+        let mut holes = [Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(0),
+        }; 4];
         let mut n = 0usize;
         bm.for_each_free(|r| {
             holes[n] = r;
@@ -222,8 +246,8 @@ mod verification {
         });
 
         assert!(n == 2);
-        assert!(holes[0].base == 0 && holes[0].frames == 2);
-        assert!(holes[1].base == 4 && holes[1].frames == 4);
+        assert!(holes[0].base == Pfn::new(0) && holes[0].frames == FrameCount::new(2));
+        assert!(holes[1].base == Pfn::new(4) && holes[1].frames == FrameCount::new(4));
     }
 
     /// Two reserved ranges split RAM into three gaps and exercise the
@@ -232,13 +256,25 @@ mod verification {
     #[kani::unwind(12)]
     fn for_each_free_two_reserved() {
         let mut bm = empty_bootmem();
-        bm.memory[0] = Region { base: 0, frames: 8 };
+        bm.memory[0] = Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(8),
+        };
         bm.n_memory = 1;
-        bm.reserved[0] = Region { base: 1, frames: 1 }; // [1,2)
-        bm.reserved[1] = Region { base: 4, frames: 1 }; // [4,5)
+        bm.reserved[0] = Region {
+            base: Pfn::new(1),
+            frames: FrameCount::new(1),
+        }; // [1,2)
+        bm.reserved[1] = Region {
+            base: Pfn::new(4),
+            frames: FrameCount::new(1),
+        }; // [4,5)
         bm.n_reserved = 2;
 
-        let mut holes = [Region { base: 0, frames: 0 }; 4];
+        let mut holes = [Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(0),
+        }; 4];
         let mut n = 0usize;
         bm.for_each_free(|r| {
             holes[n] = r;
@@ -246,9 +282,9 @@ mod verification {
         });
 
         assert!(n == 3);
-        assert!(holes[0].base == 0 && holes[0].frames == 1); // [0,1)
-        assert!(holes[1].base == 2 && holes[1].frames == 2); // [2,4)
-        assert!(holes[2].base == 5 && holes[2].frames == 3); // [5,8)
+        assert!(holes[0].base == Pfn::new(0) && holes[0].frames == FrameCount::new(1)); // [0,1)
+        assert!(holes[1].base == Pfn::new(2) && holes[1].frames == FrameCount::new(2)); // [2,4)
+        assert!(holes[2].base == Pfn::new(5) && holes[2].frames == FrameCount::new(3)); // [5,8)
     }
 
     /// Mass conservation over one RAM region and one symbolic reserved range:
@@ -264,19 +300,19 @@ mod verification {
 
         let mut bm = empty_bootmem();
         bm.memory[0] = Region {
-            base: 0,
-            frames: m_frames,
+            base: Pfn::new(0),
+            frames: FrameCount::new(m_frames as usize),
         }; // [0, m_frames)
         bm.n_memory = 1;
         bm.reserved[0] = Region {
-            base: r_base,
-            frames: r_frames,
+            base: Pfn::new(r_base),
+            frames: FrameCount::new(r_frames as usize),
         };
         bm.n_reserved = 1;
 
         let mut freed = 0u32;
         bm.for_each_free(|r| {
-            freed += r.frames;
+            freed += r.frames.get() as u32;
         });
 
         // reserved ∩ [0, m_frames)
@@ -291,13 +327,19 @@ mod verification {
     #[kani::unwind(6)]
     fn reserve_keeps_sorted() {
         let mut bm = empty_bootmem();
-        bm.reserved[0] = Region { base: 2, frames: 1 };
-        bm.reserved[1] = Region { base: 5, frames: 1 };
+        bm.reserved[0] = Region {
+            base: Pfn::new(2),
+            frames: FrameCount::new(1),
+        };
+        bm.reserved[1] = Region {
+            base: Pfn::new(5),
+            frames: FrameCount::new(1),
+        };
         bm.n_reserved = 2;
 
         let base: u32 = kani::any();
         kani::assume(base <= 8);
-        bm.reserve(base, 1);
+        bm.reserve(Pfn::new(base), FrameCount::new(1));
 
         assert!(bm.n_reserved == 3);
         let mut i = 1usize;
@@ -311,12 +353,12 @@ mod verification {
     #[kani::proof]
     fn add_memory_appends() {
         let mut bm = empty_bootmem();
-        bm.add_memory(0, 4);
-        bm.add_memory(10, 4);
+        bm.add_memory(Pfn::new(0), FrameCount::new(4));
+        bm.add_memory(Pfn::new(10), FrameCount::new(4));
 
         assert!(bm.n_memory == 2);
-        assert!(bm.memory[0].base == 0 && bm.memory[0].frames == 4);
-        assert!(bm.memory[1].base == 10 && bm.memory[1].frames == 4);
+        assert!(bm.memory[0].base == Pfn::new(0) && bm.memory[0].frames == FrameCount::new(4));
+        assert!(bm.memory[1].base == Pfn::new(10) && bm.memory[1].frames == FrameCount::new(4));
     }
 
     /// `reserve_bytes` rounds OUTWARD: the frame range fully covers the byte
@@ -334,8 +376,8 @@ mod verification {
 
         assert!(bm.n_reserved == 1);
         let r = bm.reserved[0];
-        assert!((r.base as usize) * crate::frame::PAGE_SIZE <= base_pa);
-        assert!((r.end() as usize) * crate::frame::PAGE_SIZE >= end_pa);
+        assert!(r.base.index() * crate::frame::PAGE_SIZE <= base_pa);
+        assert!(r.end().index() * crate::frame::PAGE_SIZE >= end_pa);
     }
 
     /// `add_memory_bytes` rounds INWARD: any region it adds lies fully inside
@@ -352,8 +394,8 @@ mod verification {
 
         if bm.n_memory == 1 {
             let r = bm.memory[0];
-            assert!((r.base as usize) * crate::frame::PAGE_SIZE >= base_pa);
-            assert!((r.end() as usize) * crate::frame::PAGE_SIZE <= end_pa);
+            assert!(r.base.index() * crate::frame::PAGE_SIZE >= base_pa);
+            assert!(r.end().index() * crate::frame::PAGE_SIZE <= end_pa);
         }
     }
 
@@ -364,13 +406,19 @@ mod verification {
     #[kani::unwind(12)]
     fn alloc_top_down_picks_highest() {
         let mut bm = empty_bootmem();
-        bm.memory[0] = Region { base: 0, frames: 8 };
+        bm.memory[0] = Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(8),
+        };
         bm.n_memory = 1;
-        bm.reserved[0] = Region { base: 2, frames: 2 }; // [2,4)
+        bm.reserved[0] = Region {
+            base: Pfn::new(2),
+            frames: FrameCount::new(2),
+        }; // [2,4)
         bm.n_reserved = 1;
 
-        let base = bm.alloc(2, 2).unwrap();
-        assert!(base == 6);
+        let base = bm.alloc(FrameCount::new(2), 2).unwrap();
+        assert!(base == Pfn::new(6));
         assert!(bm.n_reserved == 2); // the block is now reserved
     }
 
@@ -380,9 +428,15 @@ mod verification {
     #[kani::unwind(12)]
     fn alloc_never_hits_reserved() {
         let mut bm = empty_bootmem();
-        bm.memory[0] = Region { base: 0, frames: 8 };
+        bm.memory[0] = Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(8),
+        };
         bm.n_memory = 1;
-        bm.reserved[0] = Region { base: 2, frames: 2 }; // [2,4)
+        bm.reserved[0] = Region {
+            base: Pfn::new(2),
+            frames: FrameCount::new(2),
+        }; // [2,4)
         bm.n_reserved = 1;
 
         let frames: u32 = kani::any();
@@ -390,10 +444,10 @@ mod verification {
         let align: u32 = kani::any();
         kani::assume(align == 1 || align == 2 || align == 4);
 
-        if let Some(base) = bm.alloc(frames, align) {
-            assert!(base % align == 0); // aligned
-            assert!(base + frames <= 8); // inside RAM [0,8)
-            assert!(base + frames <= 2 || base >= 4); // disjoint from [2,4)
+        if let Some(base) = bm.alloc(FrameCount::new(frames as usize), align) {
+            assert!(base.raw() % align == 0); // aligned
+            assert!(base.raw() + frames <= 8); // inside RAM [0,8)
+            assert!(base.raw() + frames <= 2 || base.raw() >= 4); // disjoint from [2,4)
         }
     }
 
@@ -402,13 +456,19 @@ mod verification {
     #[kani::unwind(12)]
     fn alloc_returns_none_when_too_big() {
         let mut bm = empty_bootmem();
-        bm.memory[0] = Region { base: 0, frames: 8 };
+        bm.memory[0] = Region {
+            base: Pfn::new(0),
+            frames: FrameCount::new(8),
+        };
         bm.n_memory = 1;
-        bm.reserved[0] = Region { base: 2, frames: 2 }; // [2,4)
+        bm.reserved[0] = Region {
+            base: Pfn::new(2),
+            frames: FrameCount::new(2),
+        }; // [2,4)
         bm.n_reserved = 1;
 
         // free gaps are [0,2) and [4,8); the largest is 4 frames.
-        assert!(bm.alloc(5, 1) == None);
+        assert!(bm.alloc(FrameCount::new(5), 1) == None);
         assert!(bm.n_reserved == 1);
     }
 
@@ -428,19 +488,19 @@ mod verification {
         kani::assume(b1 <= (1 << 20) && f1 <= (1 << 20));
 
         bm.memory[0] = Region {
-            base: b0,
-            frames: f0,
+            base: Pfn::new(b0),
+            frames: FrameCount::new(f0 as usize),
         };
         bm.memory[1] = Region {
-            base: b1,
-            frames: f1,
+            base: Pfn::new(b1),
+            frames: FrameCount::new(f1 as usize),
         };
         bm.n_memory = 2;
 
         let (base, nr) = bm.ram_span();
 
-        assert!(base <= b0 && base <= b1); // base at/below every region base
-        assert!((base as usize) + nr >= (b0 + f0) as usize); // end at/above ends
-        assert!((base as usize) + nr >= (b1 + f1) as usize);
+        assert!(base.raw() <= b0 && base.raw() <= b1); // base at/below every region base
+        assert!(base.index() + nr.get() >= (b0 + f0) as usize); // end at/above ends
+        assert!(base.index() + nr.get() >= (b1 + f1) as usize);
     }
 }

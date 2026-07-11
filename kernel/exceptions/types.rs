@@ -1,7 +1,7 @@
 use kernel_arch::mm::VirtAddr;
 use kernel_arch::read_sysreg;
 use kernel_arch::reg::{Esr, Spsr};
-use kernel_builtin::kernel_uart_direct_log;
+use kernel_builtin::kernel_log_raw;
 
 /// CPU snapshot saved at exception entry and restored on `eret`.
 ///
@@ -51,17 +51,17 @@ impl TrapFrame {
         let far = VirtAddr::new(read_sysreg!(far_el1) as usize);
         let spsr = self.spsr();
 
-        kernel_uart_direct_log!("");
-        kernel_uart_direct_log!("=== {} ===", label);
-        kernel_uart_direct_log!("Class    : {:?} ({:#04x})", esr.class(), esr.ec_raw());
-        kernel_uart_direct_log!("Reason   : {}", esr.class().description());
-        kernel_uart_direct_log!("ESR_EL1  : {:#018x}", esr.raw());
-        kernel_uart_direct_log!("ELR_EL1  : {:#018x}", self.elr());
-        kernel_uart_direct_log!("FAR_EL1  : {:#018x}", far);
-        kernel_uart_direct_log!("SPSR_EL1 : {:#018x} ({:?})", spsr, spsr.mode());
-        kernel_uart_direct_log!("SP_EL0   : {:#018x}", self.user_sp());
+        kernel_log_raw!("");
+        kernel_log_raw!("=== {} ===", label);
+        kernel_log_raw!("Class    : {:?} ({:#04x})", esr.class(), esr.ec_raw());
+        kernel_log_raw!("Reason   : {}", esr.class().description());
+        kernel_log_raw!("ESR_EL1  : {:#018x}", esr.raw());
+        kernel_log_raw!("ELR_EL1  : {:#018x}", self.elr());
+        kernel_log_raw!("FAR_EL1  : {:#018x}", far);
+        kernel_log_raw!("SPSR_EL1 : {:#018x} ({:?})", spsr, spsr.mode());
+        kernel_log_raw!("SP_EL0   : {:#018x}", self.user_sp());
         for (i, x) in self.x.iter().enumerate() {
-            kernel_uart_direct_log!("x{:<2}      : {:#018x}", i, x);
+            kernel_log_raw!("x{:<2}      : {:#018x}", i, x);
         }
     }
 }
