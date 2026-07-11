@@ -37,6 +37,7 @@ pub const VALID_BIT: u64 = 1 << 0;
 pub const TABLE_BIT: u64 = 1 << 1;
 
 /// Zero word: every bit clear, entry is invalid.
+#[allow(dead_code)] // TODO: drop once `Entry::invalid` is used
 pub const TYPE_INVALID: u64 = 0;
 
 /// `0b01` — valid block entry. Only meaningful at L1 (1 GiB) and L2
@@ -108,8 +109,10 @@ pub enum Access {
     /// EL1 read-only, EL0 has no access. For `.text` and `.rodata`.
     KernelReadOnly,
     /// Both EL0 and EL1 read/write. For shared user / kernel regions.
+    #[allow(dead_code)] // TODO: drop once userspace mappings use it
     SharedReadWrite,
     /// Both EL0 and EL1 read-only.
+    #[allow(dead_code)] // TODO: drop once userspace mappings use it
     SharedReadOnly,
 }
 
@@ -134,6 +137,7 @@ pub enum Executable {
     /// EL1 may execute, EL0 may not. `.text` of the kernel image.
     Kernel,
     /// EL0 may execute, EL1 may not. Userspace `.text` once we have it.
+    #[allow(dead_code)] // TODO: drop once userspace mappings use it
     User,
     /// Neither EL may execute. All data, MMIO, stacks.
     None,
@@ -189,6 +193,7 @@ pub struct Entry(u64);
 
 impl Entry {
     /// Build an invalid (zeroed) entry. MMU follows nothing here.
+    #[allow(dead_code)] // TODO: drop once unmapping/teardown uses it
     pub const fn invalid() -> Self {
         Self(TYPE_INVALID)
     }
@@ -217,6 +222,7 @@ impl Entry {
     }
 
     /// Raw 64-bit value, useful for logging and bit inspection.
+    #[allow(dead_code)] // TODO: drop once entry inspection/logging uses it
     pub const fn raw(self) -> u64 {
         self.0
     }
@@ -233,6 +239,7 @@ impl Entry {
     }
 
     /// `0b01` — valid block entry. Only meaningful at L1 and L2.
+    #[allow(dead_code)] // TODO: drop once the walker distinguishes blocks
     pub const fn is_block(self) -> bool {
         self.is_valid() && (self.0 & TABLE_BIT == 0)
     }
@@ -273,6 +280,7 @@ impl PageTable {
     }
 
     /// Read the entry indexed by `va` at `level`.
+    #[allow(dead_code)] // TODO: drop once read-back / fault decoding uses it
     pub fn entry_at(&self, va: VirtAddr, level: Level) -> Entry {
         self.entries[level.index_in(va)]
     }

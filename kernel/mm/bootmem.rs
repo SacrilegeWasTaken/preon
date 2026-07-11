@@ -26,6 +26,7 @@ impl Region {
         Pfn::new((self.base.index() + self.frames.raw()) as u32)
     }
 
+    #[allow(dead_code)] // exercised only by Kani harnesses
     fn overlaps(&self, o: Region) -> bool {
         self.base < o.end() && o.base < self.end()
     }

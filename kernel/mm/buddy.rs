@@ -77,17 +77,21 @@ impl PageInfo {
         debug_assert!(self.is_head());
         self.order
     }
+    #[allow(dead_code)] // TODO: drop once a caller sets order through this
     fn set_order(&mut self, order: Order) {
         debug_assert!(order.index() < MAX_ORDER);
         self.order = order
     }
+    #[allow(dead_code)] // exercised only by Kani harnesses
     fn state(&self) -> PageState {
         self.state
     }
+    #[allow(dead_code)] // TODO: drop once a caller sets state through this
     fn set_state(&mut self, state: PageState) {
         self.state = state
     }
 
+    #[allow(dead_code)] // TODO: drop once per-page refcounting uses it
     fn count(&self) -> &AtomicU32 {
         &self.count
     }

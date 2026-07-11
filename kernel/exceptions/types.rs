@@ -25,10 +25,18 @@ pub struct TrapFrame {
 }
 
 impl TrapFrame {
+    // These mirror the stack frame layout in `ventry.s`. Not yet consumed by
+    // Rust (the assembler hardcodes the same offsets).
+    // TODO: wire to const-asserts (offset_of!) and drop these allows.
+    #[allow(dead_code)]
     pub const X_OFFSET: usize = 0;
+    #[allow(dead_code)]
     pub const SP_EL0_OFFSET: usize = 31 * 8;
+    #[allow(dead_code)]
     pub const ELR_OFFSET: usize = 31 * 8 + 8;
+    #[allow(dead_code)]
     pub const SPSR_OFFSET: usize = 31 * 8 + 16;
+    #[allow(dead_code)]
     pub const SIZE: usize = 272;
 
     /// PC the interrupted code will resume at, decoded as a virtual address.
