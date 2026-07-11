@@ -64,7 +64,7 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
     kernel_log!("buddy up: {} free frames", buddy.free_frames().raw());
     BUDDY.call_once(|| SpinLock::new(buddy));
 
-    let psci = kernel_cpu::psci::Psci::from_fdt(&fdt).expect("no /psci node");
+    let psci = kernel_cpu::Psci::from_fdt(&fdt).expect("no /psci node");
     kernel_cpu::Smp::bring_up_all(root, &fdt, &psci).expect("SMP bring-up failed");
 
     unsafe { reclaim_trampoline() };
@@ -155,6 +155,6 @@ unsafe fn reclaim_trampoline() {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    kernel_exceptions::panic::panic_dump(info);
+    kernel_exceptions::panic_dump(info);
     wfe_loop!();
 }

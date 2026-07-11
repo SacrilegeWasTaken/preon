@@ -14,10 +14,12 @@
 
 use core::arch::global_asm;
 
-pub mod handlers;
-pub mod page_fault;
-pub mod panic;
+pub(crate) mod handlers;
+pub(crate) mod page_fault;
+pub(crate) mod panic;
 pub mod types;
+
+pub use panic::panic_dump;
 
 // Vector table and dispatch trampolines for EL1.
 global_asm!(include_str!("asm/ventry.s"));

@@ -3,10 +3,11 @@
 
 use core::arch::global_asm;
 
-pub mod psci;
-pub mod smp;
-pub mod types;
+pub(crate) mod psci;
+pub(crate) mod smp;
+pub(crate) mod types;
 
+pub use psci::{Psci, PsciError};
 pub use smp::{BringUpError, CpuData, STACK_SIZE, SecondaryBootData, Smp};
 pub use types::{CpuId, Mpidr};
 
