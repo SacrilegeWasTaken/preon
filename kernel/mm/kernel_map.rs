@@ -102,7 +102,7 @@ pub fn build(fdt: &Fdt) -> PhysAddr {
     root_pa
 }
 
-pub fn build_image(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
+fn build_image(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
     unsafe {
         map_section(root, &__text_start, &__text_end, TEXT_ATTRS, alloc);
         map_section(root, &__rodata_start, &__rodata_end, RODATA_ATTRS, alloc);
@@ -112,7 +112,7 @@ pub fn build_image(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
     }
 }
 
-pub fn build_linear(root: &mut PageTable, fdt: &Fdt, alloc: &mut impl FrameAllocator) {
+fn build_linear(root: &mut PageTable, fdt: &Fdt, alloc: &mut impl FrameAllocator) {
     ram::for_each_region(fdt, |r| {
         map_region(root, r.base, r.size, LINEAR_RAM, alloc);
     })
@@ -123,7 +123,7 @@ pub fn build_linear(root: &mut PageTable, fdt: &Fdt, alloc: &mut impl FrameAlloc
 /// same VA in the permanent map, so the console survives `switch_ttbr1` and
 /// the later TTBR0 teardown. One 4 KiB L3 page today; extend here as GIC /
 /// timer MMIO is added.
-pub fn build_device(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
+fn build_device(root: &mut PageTable, alloc: &mut impl FrameAllocator) {
     let device_va = pa_to_device_va(PhysAddr::new(UART_PA));
     root.map(
         device_va,

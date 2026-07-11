@@ -44,7 +44,7 @@ static NEXT: AtomicUsize = AtomicUsize::new(0);
 /// # Panics                                                                      
 /// Panics if [`POOL_PAGES`] is exhausted. Bump it if early MMU bring-up
 /// runs out of frames.                                                           
-pub fn bump_alloc_page() -> PhysAddr {
+pub(crate) fn bump_alloc_page() -> PhysAddr {
     let idx = NEXT.fetch_add(1, Ordering::Relaxed);
     if idx >= POOL_PAGES {
         panic!("bootstrap frame allocator exhausted ({} pages)", POOL_PAGES);

@@ -2,6 +2,6 @@
 //! UART, spin locks and one-time init, and typed MMIO helpers.
 #![no_std]
 
-pub mod mmio;
+pub(crate) mod mmio;
 pub mod sync;
 pub mod uart;
