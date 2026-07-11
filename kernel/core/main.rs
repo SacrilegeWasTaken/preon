@@ -36,18 +36,6 @@ pub extern "C" fn kmain(dtb: usize) -> ! {
 
     kernel_arch::percpu::init();
 
-    {
-        // smoke
-        #[unsafe(link_section = ".percpu")]
-        static TICK: u64 = 0;
-        unsafe {
-            let t: *mut u64 = kernel_arch::this_cpu_ptr!(TICK);
-            *t += 1;
-            *t += 1;
-            kernel_uart_direct_log!("percpu tick = {} (want 2)", *t)
-        }
-    }
-
     let fdt = parse_fdt(dtb);
     let root = kernel_mm::kernel_map::build(&fdt);
     kernel_uart_log!("kernel_map built, root at 0x{:x}", root.as_usize());

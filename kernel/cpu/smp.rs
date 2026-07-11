@@ -39,14 +39,10 @@ pub struct CpuData {
 /// Data block handed to a secondary CPU through the PSCI `ctx` argument.
 #[repr(C)]
 pub struct SecondaryBootData {
-    pub cpu_data_ptr: *const CpuData,
+    pub percpu_offset: usize,
     pub stack_top: usize,
     pub ttbr1_root: usize,
 }
-
-#[repr(C, align(16))]
-struct CpuDataCell(UnsafeCell<CpuData>);
-unsafe impl Sync for CpuDataCell {}
 
 #[repr(C, align(16))]
 struct BootDataCell(UnsafeCell<SecondaryBootData>);
@@ -63,19 +59,17 @@ static CPU_ONLINE: AtomicU64 = AtomicU64::new(0);
 /// # Safety
 ///
 /// Each CPU writing into it's own region.
-static CPU_DATA: [CpuDataCell; MAX_CPUS] = [const {
-    CpuDataCell(UnsafeCell::new(CpuData {
-        cpu_id: CpuId::PRIMARY,
-        mpidr: Mpidr::new(0),
-    }))
-}; MAX_CPUS];
-
+#[unsafe(link_section = ".percpu")]
+static CPU_DATA: CpuData = CpuData {
+    cpu_id: CpuId::PRIMARY,
+    mpidr: Mpidr::new(0),
+};
 /// # Safety
 ///
 /// Each CPU writing into it's own region
 static BOOT_DATA: [BootDataCell; MAX_CPUS] = [const {
     BootDataCell(UnsafeCell::new(SecondaryBootData {
-        cpu_data_ptr: core::ptr::null(),
+        percpu_offset: 0,
         stack_top: 0,
         ttbr1_root: 0,
     }))
@@ -115,7 +109,7 @@ impl Smp {
 
     /// Read the current CPU's control block via `TPIDR_EL1`.
     pub fn current() -> &'static CpuData {
-        current_cpu()
+        unsafe { &*kernel_arch::this_cpu_ptr!(CPU_DATA) }
     }
 
     /// Spin until `cpu` calls `mark_online`.
@@ -128,10 +122,10 @@ impl Smp {
     /// Populate `CPU_DATA[cpu]` so that the corresponding CPU sees a valid
     /// control block once `TPIDR_EL1` is set.
     pub fn init_cpu(cpu: CpuId, mpidr: Mpidr) {
-        let ptr = CPU_DATA[cpu.as_usize()].0.get();
+        let p: *mut CpuData = kernel_arch::per_cpu_ptr!(cpu.as_usize(), CPU_DATA);
         unsafe {
-            (*ptr).cpu_id = cpu;
-            (*ptr).mpidr = mpidr;
+            (*p).cpu_id = cpu;
+            (*p).mpidr = mpidr;
         }
     }
 
@@ -141,12 +135,12 @@ impl Smp {
         // Safety: each CpuData slot is written only by `init_cpu` (called
         // by the primary before the corresponding CPU starts running) and
         // read everywhere else. UnsafeCell + 'static lifetime is sound.
-        unsafe { &*CPU_DATA[cpu.as_usize()].0.get() }
+        unsafe { &*kernel_arch::per_cpu_ptr!(cpu.as_usize(), CPU_DATA) }
     }
 
     /// Publish `cpu`'s control block to `TPIDR_EL1` on the calling CPU.
     pub fn install_current(cpu: CpuId) {
-        install_current_cpu_local(Self::cpu_data(cpu));
+        install_current_cpu_local(kernel_arch::percpu::offset_of_cpu(cpu.as_usize()));
     }
 
     /// Fill the static `BOOT_DATA` slot for `cpu` and return a pointer
@@ -158,7 +152,7 @@ impl Smp {
     ) -> *const SecondaryBootData {
         let ptr = BOOT_DATA[cpu.as_usize()].0.get();
         unsafe {
-            (*ptr).cpu_data_ptr = Self::cpu_data(cpu) as *const CpuData;
+            (*ptr).percpu_offset = kernel_arch::percpu::offset_of_cpu(cpu.as_usize());
             (*ptr).stack_top = stack_top;
             (*ptr).ttbr1_root = root.as_usize();
         }
@@ -217,34 +211,9 @@ impl Smp {
 /// Called from `secondary.asm` on every secondary right after its stack
 /// is set, and from `Smp::install_current` for the primary.
 #[unsafe(no_mangle)]
-extern "C" fn install_current_cpu_local(ptr: *const CpuData) {
+extern "C" fn install_current_cpu_local(offset: usize) {
     unsafe {
-        core::arch::asm!(
-            "msr tpidr_el1, {0}",
-            "isb",
-            in(reg) ptr as u64,
-            options(nomem, nostack, preserves_flags),
-        );
-    }
-}
-
-/// Read the current CPU's control block via `TPIDR_EL1`.
-///
-/// Prefer [`Smp::current`] in new code; kept as a free function so it
-/// can be reached from places that don't pull in the `Smp` facade.
-///
-/// # Safety
-/// The caller asserts that the current CPU went through bring-up so
-/// `TPIDR_EL1` points at a valid `CpuData`.
-fn current_cpu() -> &'static CpuData {
-    let ptr: *const CpuData;
-    unsafe {
-        core::arch::asm!(
-            "mrs {0}, tpidr_el1",
-            out(reg) ptr,
-            options(nomem, nostack, preserves_flags),
-        );
-        &*ptr
+        kernel_arch::percpu::set_this_cpu_offset(offset);
     }
 }
 

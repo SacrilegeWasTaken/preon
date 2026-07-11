@@ -11,12 +11,23 @@ pub unsafe fn set_this_cpu_offset(offset: usize) {
 }
 
 #[macro_export]
+macro_rules! per_cpu_ptr {
+    ($cpu:expr,$var:path) => {
+        ($crate::percpu::offset_of_cpu($cpu) + (&raw const $var as usize)) as *mut _
+    };
+}
+
+#[macro_export]
 macro_rules! this_cpu_ptr {
     ($var:path) => {
         ($crate::percpu::this_cpu_offset() + (&raw const $var as usize)) as *mut _
     };
 }
-use core::sync::atomic::{AtomicUsize, Ordering};
+
+use core::{
+    cell::UnsafeCell,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 static OFFSETS: [AtomicUsize; MAX_CPUS] = [const { AtomicUsize::new(0) }; MAX_CPUS];
 
@@ -28,16 +39,21 @@ unsafe extern "C" {
 const PERCPU_MAX: usize = 4096;
 
 #[repr(C)]
-struct Area([u8; PERCPU_MAX]);
-static AREAS: [Area; MAX_CPUS] = [const { Area([0; PERCPU_MAX]) }; MAX_CPUS];
+struct Area(UnsafeCell<[u8; PERCPU_MAX]>);
+unsafe impl Sync for Area {}
+static AREAS: [Area; MAX_CPUS] = [const { Area(UnsafeCell::new([0; PERCPU_MAX])) }; MAX_CPUS];
 pub fn init() {
     let start = &raw const __percpu_start as usize;
     let size = (&raw const __percpu_end as usize) - start;
     assert!(size <= PERCPU_MAX, "per-CPU template exceeds area size");
     for cpu in 0..MAX_CPUS {
-        let area = &raw const AREAS[cpu] as usize;
+        let area = AREAS[cpu].0.get() as usize;
         // template is NOLOAD (zero) → area already zero, but be explicit
         OFFSETS[cpu].store(area - start, Ordering::Relaxed);
     }
     unsafe { set_this_cpu_offset(OFFSETS[0].load(Ordering::Relaxed)) }; // primary = CPU 0
+}
+
+pub fn offset_of_cpu(cpu: usize) -> usize {
+    OFFSETS[cpu].load(Ordering::Relaxed)
 }
