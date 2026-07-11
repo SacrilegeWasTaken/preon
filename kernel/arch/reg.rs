@@ -192,4 +192,18 @@ mod verification {
         let reassembled = (ec << 26) | (il << 25) | iss;
         assert!(reassembled == (raw & 0xFFFF_FFFF));
     }
+
+    /// The abort-syndrome accessors read their architected `ISS` sub-fields:
+    /// `DFSC = ISS[5:0]`, `WnR = ISS[6]`, `FnV = ISS[10]` (so `far_valid` is
+    /// its inverse). These are the bits the page-fault path branches on, so
+    /// pin their positions independently of the tiling proof above.
+    #[kani::proof]
+    fn esr_abort_syndrome_bits() {
+        let raw: u64 = kani::any();
+        let esr = Esr::from_raw(raw);
+
+        assert!(esr.dfsc().raw() as u64 == (raw & 0x3F)); // DFSC = ISS[5:0]
+        assert!(esr.is_write() == ((raw >> 6) & 1 == 1)); // WnR  = ISS[6]
+        assert!(esr.far_valid() == ((raw >> 10) & 1 == 0)); // far_valid = !FnV
+    }
 }
