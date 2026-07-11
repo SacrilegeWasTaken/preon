@@ -10,7 +10,7 @@ use kernel_mm::layout::{image_va_to_pa, pa_to_linear_va};
 use crate::psci::{Psci, PsciError};
 use crate::types::{CpuId, Mpidr};
 
-pub const MAX_CPUS: usize = 16;
+pub(crate) use kernel_arch::MAX_CPUS;
 pub const STACK_SIZE: usize = 64 * 1024;
 
 /// Per-CPU control block reached via `TPIDR_EL1`.

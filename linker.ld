@@ -36,6 +36,14 @@ SECTIONS {
     __boot_bss_end = .;
 
 
+    .percpu (NOLOAD) : ALIGN(4096) {
+        __percpu_start = .;
+        *(.percpu .percpu.*)
+        . = ALIGN(4096);
+        __percpu_end = .;
+    }
+
+
     . = KERNEL_IMAGE_BASE + (IMAGE_TEXT_PA - IMAGE_PA_BASE);
 
 

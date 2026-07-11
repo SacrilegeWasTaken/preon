@@ -13,7 +13,10 @@
 
 pub mod exceptions;
 pub mod mm;
+pub mod percpu;
 pub mod reg;
+
+pub const MAX_CPUS: usize = 128;
 
 /// Cache line size used for padding to avoid false sharing.
 /// 128 covers Apple Silicon (Firestorm/Avalanche, 128-byte L1 line) as

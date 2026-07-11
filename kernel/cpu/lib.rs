@@ -6,7 +6,7 @@ pub mod psci;
 pub mod smp;
 pub mod types;
 
-pub use smp::{BringUpError, CpuData, SecondaryBootData, Smp, MAX_CPUS, STACK_SIZE};
+pub use smp::{BringUpError, CpuData, STACK_SIZE, SecondaryBootData, Smp};
 pub use types::{CpuId, Mpidr};
 
 global_asm!(include_str!("asm/secondary.s"));
