@@ -324,7 +324,13 @@ _start:
     msr     sctlr_el1, x0
     isb
 
-    // Completely unknown thing somehow fixing the DataAbortSameEl exception
+    // Move SP off the PA stack onto the upper-half VA stack. Until now SP
+    // pointed at __stack_top_pa (set before the MMU came up); that low address
+    // resolves through TTBR0's single 2 MiB identity RAM block, and the stack
+    // extends past it, so the first post-MMU push faulted (DataAbort, same EL).
+    // The image VA stack is backed by the 1 GiB image block, so it is fully
+    // mapped — re-point SP there before the next access. TODO! confirm the exact
+    // fault address; this is the reasoned cause, not yet traced end-to-end.
     ldr     x9, =__stack_top
     mov     sp, x9
 
