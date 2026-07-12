@@ -48,4 +48,4 @@ shell:
 KANI_TARGET ?= $(shell rustc -vV | sed -n 's/host: //p')
 
 verify:
-	CARGO_BUILD_TARGET=$(KANI_TARGET) cargo kani -p kernel_arch -p kernel_mm
+	CARGO_BUILD_TARGET=$(KANI_TARGET) cargo kani -p kernel_arch -p kernel_cpu -p kernel_mm

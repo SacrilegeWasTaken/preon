@@ -16,3 +16,6 @@ kernel_arch.workspace = true
 kernel_mm.workspace = true
 
 fdt.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
