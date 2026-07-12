@@ -33,9 +33,10 @@ impl CpuId {
 pub struct Mpidr(u64);
 
 impl Mpidr {
-    // AFF0..AFF2 in [23:0]; strips RES1, U, MT and reserved bits so that
+    // AFF0..AFF2 in [23:0] and AFF3 in [39:32]; strips RES1, U, MT and
+    // reserved bits so that
     // MPIDR_EL1 of a primary CPU compares equal to its DTB `cpu@N/reg`.
-    const MASK: u64 = 0x00FF_FFFF;
+    const MASK: u64 = 0x00FF_00FF_FFFF;
 
     pub const fn new(raw: u64) -> Self {
         Self(raw & Self::MASK)
