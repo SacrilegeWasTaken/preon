@@ -315,6 +315,16 @@ questions we ask:
 5. **What does Linux do here, and why?** Linux's design isn't binding,
    but the friction of departure should be a conscious decision.
 
+The one deliberate exception to principle 1 is **physical safety**. Power,
+voltage, and thermal management run as a userspace governor like everything
+else — but a crashed governor there can *damage hardware*, not just drop a
+service, so principle 3 fails: the failure mode is not local. For that single
+case the kernel keeps a minimal, verifiable **safety backstop** (an armed
+hardware thermal-trip plus a governor-liveness deadline) that forces a safe
+low-power state if the limit is crossed. Mechanism and policy stay in
+userspace; only the last-resort guard that must outlive a dead governor sits
+near the kernel. See the roadmap's *Power, frequency & thermal* phase.
+
 ---
 
 ## Inspirations

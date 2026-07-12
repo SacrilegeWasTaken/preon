@@ -293,8 +293,43 @@ and it resumes in the kernel's virtual address space. Confirmed on
 - [ ] DTB-based device discovery instead of hard-coded MMIO bases
 - [ ] PSCI `system_off` / `system_reset` for clean shutdown
 - [ ] Shell process as the first interactive userspace program
-- [ ] Power management: `wfi`-driven idle, suspend / resume
+- [ ] Basic `wfi`-driven idle (deep idle + DVFS + thermal come in Phase 11)
 - [ ] Documentation: IPC ABI, capability model, syscall reference
+
+### Phase 11 — Power, frequency & thermal
+
+The desktop tier lives or dies on this: DVFS for battery and efficiency,
+thermal management so the chip doesn't cook, deep idle for silence. It is
+also the most **dangerous** code in the system — a wrong voltage or a missed
+thermal trip can physically damage hardware — which forces a specific
+microkernel split.
+
+**Policy in userspace, last-resort safety in the kernel.** The governor is a
+userspace power-management server holding caps to the clock / PMIC / thermal
+MMIO and the sensor IRQs; it owns the frequency governors, the idle policy,
+and the P/E placement hints. But a crashed governor must never be able to
+overheat the silicon, so the kernel keeps a minimal, verifiable **safety
+backstop**: it arms the hardware thermal-trip and a governor-liveness
+deadline, and forces a safe low-power state (or halt) if either is breached.
+Mechanism delegated; the one path that must survive a dead governor retained.
+
+- [ ] Clock / PLL control + voltage-regulator (PMIC) driver as a userspace
+      server (caps to the relevant MMIO)
+- [ ] DVFS: per-core / per-cluster operating points (OPP table from the
+      device tree), voltage+frequency transitions coordinated with the scheduler
+- [ ] cpufreq-style governors in userspace (performance / powersave /
+      on-demand / schedutil-like), swappable without touching the kernel
+- [ ] Thermal sensor driver + zones; passive throttling (drop OPP) then
+      active (fan control) as temperature climbs
+- [ ] **Kernel thermal / power safety backstop** — hardware thermal-trip
+      armed + governor-liveness deadline; on breach force a safe OPP or halt.
+      Small and Kani-checkable — the one power path that must outlive the governor
+- [ ] Deep CPU idle beyond `wfi` (C-states): per-core retention / power-down
+      via PSCI `CPU_SUSPEND`, wake latency folded into the idle policy
+- [ ] P/E-aware DVFS: feed cluster frequency into the scheduler's placement
+      hints (Phase 6) — heavy threads to P-cores at high OPP, light ones to
+      E-cores at low OPP
+- [ ] System sleep: suspend-to-idle / suspend-to-RAM via PSCI
 
 ### Beyond the phases — the long horizon
 
