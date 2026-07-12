@@ -331,6 +331,50 @@ Mechanism delegated; the one path that must survive a dead governor retained.
       E-cores at low OPP
 - [ ] System sleep: suspend-to-idle / suspend-to-RAM via PSCI
 
+### Phase 12 — Debugging, tracing & profiling
+
+A native OS that silently kills a crashing process is a black hole. preon
+treats diagnostics as first-class — and gets them *cleaner* than a monolith,
+because everything is already a capability and an IPC message. The kernel's
+role stays minimal (deliver debug exceptions as IPC, expose thread-control
+syscalls, sample the PC, drive the PMU); the debugger, tracer, crash reporter,
+and profiler are ordinary userspace servers.
+
+- **Debugger (`pdb`) — `ptrace` without the pain.** No grab-bag syscall and
+  no POSIX signals: a debugger holds a **thread-control capability** on its
+  target and drives it with narrow calls — `thread_suspend` / `resume`,
+  `thread_read_regs` / `write_regs`, `proc_read_mem` / `write_mem`.
+  Breakpoints are a `write_mem` of `BRK` over the target instruction;
+  single-step sets `MDSCR_EL1.SS`. On the trap the kernel freezes the thread
+  and delivers the debug exception as an IPC to the cap holder.
+- **IPC tracer — an `strace` that fits.** A process talks to the world only
+  through IPC, so tracing is tapping its endpoint: the kernel duplicates the
+  process's messages to a tracer port, which decodes and prints them
+  (`vfs_open("/etc/passwd")`) while the originals flow on. No context-switch
+  storm, no kernel logic beyond the tap.
+- **Crash reports & stack traces.** The kernel can't write a core file (no FS
+  driver). On a fault it suspends the thread — address space intact — and IPCs
+  a userspace `crash_reporter`, which unwinds via the ELF `.eh_frame` / DWARF
+  tables, symbolizes the backtrace, and writes the core dump through the VFS.
+- **Profiling (`preon-perf`).** Sampling: the timer IRQ records the
+  interrupted PC into a per-CPU ring buffer; a userspace tool maps addresses
+  to symbols and draws a flame graph. Hardware **PMU**: the kernel configures
+  the counters and the context switch saves / restores them per thread, so a
+  tool reads true cache-miss / branch-miss / IPC numbers.
+
+- [ ] Thread-control capability + syscalls (suspend / resume, read / write
+      registers, read / write process memory)
+- [ ] Debug-exception delivery: `BRK` and single-step (`MDSCR_EL1.SS`) routed
+      as IPC to the controlling debugger; native `pdb`
+- [ ] IPC tap → userspace `strace`-equivalent decoder
+- [ ] `crash_reporter`: `.eh_frame` / DWARF unwinding, symbolized backtrace,
+      core dump through the VFS
+- [ ] Sampling profiler (per-CPU PC ring buffer) + flame-graph tool
+- [ ] PMU: configure counters, save / restore on context switch, expose to
+      `preon-perf`
+- [ ] Linux ABI: translate `ptrace` / `perf_event_open` into the native
+      thread-control and IPC-trace mechanisms
+
 ### Beyond the phases — the long horizon
 
 Vision-level work from [`docs/IDEA.md`](docs/IDEA.md), sequenced loosely

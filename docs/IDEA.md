@@ -140,7 +140,9 @@ The kernel exposes a small set of typed objects, manipulated through
 capabilities:
 
 - **Process** — address space + capability table + threads
-- **Thread** — CPU state, stack, scheduler entity
+- **Thread** — CPU state, stack, scheduler entity. A capability to it also
+  confers *debug control* (suspend, register and memory access), so a
+  debugger needs no privileged `ptrace`-style syscall — just the capability
 - **AddressSpace** — TTBR0 + page-table tree
 - **MemoryRegion** — physical pages + permissions, mappable into one
   or more AddressSpaces
